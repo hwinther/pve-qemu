@@ -1,4 +1,4 @@
-Source: pve-qemu-kvm
+Source: pve-qemu-kvm-wsh
 Section: admin
 Priority: optional
 Maintainer: Proxmox Support Team <support@proxmox.com>
@@ -43,7 +43,7 @@ Build-Depends: debhelper-compat (= 13),
                xfslibs-dev,
 Standards-Version: 3.7.2
 
-Package: pve-qemu-kvm
+Package: pve-qemu-kvm-wsh
 Architecture: any
 Depends: ceph-common (>= 0.48),
          iproute2,

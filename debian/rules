@@ -8,7 +8,7 @@ include /usr/share/dpkg/default.mk
 
 HOST_CPU ?= $(DEB_HOST_GNU_CPU)
 
-PACKAGE=pve-qemu-kvm
+PACKAGE=pve-qemu-kvm-wsh
 destdir := $(CURDIR)/debian/$(PACKAGE)
 
 flagfile := $(destdir)/usr/share/kvm/recognized-CPUID-flags-x86_64
@@ -39,23 +39,23 @@ endif
 	# guest-agent is only required for guest systems
 	./configure \
 	    --disable-download \
-	    --docdir=/usr/share/doc/pve-qemu-kvm \
+	    --docdir=/usr/share/doc/pve-qemu-kvm-wsh \
 	    --localstatedir=/var \
 	    --prefix=/usr \
 	    --sysconfdir=/etc \
-	    --target-list=$(HOST_CPU)-softmmu,aarch64-softmmu \
+	    --target-list=$(HOST_CPU)-softmmu \
 	    --with-suffix="kvm" \
 	    --with-pkgversion="${DEB_SOURCE}_${DEB_VERSION_UPSTREAM_REVISION}" \
-	    --audio-drv-list="alsa" \
+	    --audio-drv-list="alsa,pa,sdl,pipewire" \
 	    --datadir=/usr/share \
 	    --libexecdir=/usr/lib/kvm \
 	    --disable-capstone \
-	    --disable-gtk \
+	    --enable-gtk \
 	    --disable-guest-agent \
 	    --disable-guest-agent-msi \
 	    --disable-libnfs \
 	    --disable-libssh \
-	    --disable-sdl \
+	    --enable-sdl \
 	    --disable-smartcard \
 	    --disable-strip \
 	    --disable-xen \
@@ -148,7 +148,7 @@ binary-arch: build install
 #	dh_installinfo
 	dh_installman
 	dh_link
-	dh_strip --dbgsym-migration='pve-qemu-kvm-dbg (<<8.0.0-1~)'
+	dh_strip --dbgsym-migration='pve-qemu-kvm-wsh-dbg (<<8.0.0-1~)'
 	dh_compress
 	dh_fixperms
 #	dh_perl
