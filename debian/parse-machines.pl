@@ -14,12 +14,27 @@ while (<STDIN>) {
 
     s/^\s+//;
     my @machine = split(/\s+/);
-    next if $machine[0] !~ m/^pc-(i440fx|q35)-(.+)$/;
-    push @$machines, {
-        'id' => $machine[0],
-        'type' => $1,
-        'version' => $2,
-    };
+    if ($machine[0] =~ m/^pc-(i440fx|q35)-(.+)$/) {
+        push @$machines, {
+            'id' => $machine[0],
+            'type' => $1,
+            'version' => $2,
+        };
+    }
+    elsif ($machine[0] =~ m/^(virt)-(.+)$/) {
+        push @$machines, {
+            'id' => $machine[0],
+            'type' => $1,
+            'version' => $2,
+        };
+    }
+    elsif ($machine[0] =~ m/^(sun)(4[a-z]{1})$/) {
+        push @$machines, {
+            'id' => $machine[0],
+            'type' => $1,
+            'version' => $2,
+        };
+    }
 }
 
 die "no QEMU machine types detected from STDIN input" if scalar (@$machines) <= 0;
