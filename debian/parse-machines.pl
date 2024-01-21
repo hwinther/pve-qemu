@@ -35,6 +35,13 @@ while (<STDIN>) {
             'version' => $2,
         };
     }
+    elsif ($machine[0] =~ m/^(SS-\d+)$/) {
+        push @$machines, {
+            'id' => $machine[0],
+            'type' => 'sun',
+            'version' => $1,
+        };
+    }
 }
 
 die "no QEMU machine types detected from STDIN input" if scalar (@$machines) <= 0;

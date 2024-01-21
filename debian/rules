@@ -43,7 +43,7 @@ endif
 	    --localstatedir=/var \
 	    --prefix=/usr \
 	    --sysconfdir=/etc \
-	    --target-list=$(HOST_CPU)-softmmu,aarch64-softmmu,sparc64-softmmu \
+	    --target-list=$(HOST_CPU)-softmmu,aarch64-softmmu,sparc-softmmu,sparc64-softmmu \
 	    --with-suffix="kvm" \
 	    --with-pkgversion="${DEB_SOURCE}_${DEB_VERSION_UPSTREAM_REVISION}" \
 	    --audio-drv-list="alsa" \
@@ -124,8 +124,10 @@ install: build
 	# $(destdir)/usr/bin/qemu-system-x86_64 -machine help | ./debian/parse-machines.pl > $(machinefile)
 	$(destdir)/usr/bin/qemu-system-x86_64 -machine help | ./debian/parse-machines.pl > /tmp/x86_64_machines
 	$(destdir)/usr/bin/qemu-system-aarch64 -machine help | ./debian/parse-machines.pl > /tmp/aarch64_machines
+	$(destdir)/usr/bin/qemu-system-sparc -machine help | ./debian/parse-machines.pl > /tmp/sparc_machines
 	$(destdir)/usr/bin/qemu-system-sparc64 -machine help | ./debian/parse-machines.pl > /tmp/sparc64_machines
-	jq -s 'add' /tmp/x86_64_machines /tmp/aarch64_machines /tmp/sparc64_machines > $(machinefile)
+	jq -s 'add' /tmp/x86_64_machines /tmp/aarch64_machines /tmp/sparc_machines /tmp/sparc64_machines > $(machinefile)
+	rm -f /tmp/x86_64_machines /tmp/aarch64_machines /tmp/sparc_machines /tmp/sparc64_machines
 
 # Build architecture-independent files here.
 binary-indep: build install
