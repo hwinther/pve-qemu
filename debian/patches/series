@@ -28,6 +28,7 @@ extra/0027-io-fix-cleanup-for-TLS-I-O-source-data-on-cancellati.patch
 extra/0028-io-fix-cleanup-for-websock-I-O-source-data-on-cancel.patch
 extra/0029-hw-Make-qdev_get_printable_name-consistently-return-.patch
 extra/0030-fuse-Copy-write-buffer-content-before-polling.patch
+extra/0031-fdmon-io_uring-avoid-idle-event-loop-being-accounted.patch
 bitmap-mirror/0001-drive-mirror-add-support-for-sync-bitmap-mode-never.patch
 bitmap-mirror/0002-drive-mirror-add-support-for-conditional-and-always-.patch
 bitmap-mirror/0003-mirror-add-check-for-bitmap-mode-without-bitmap.patch
