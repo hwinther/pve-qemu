@@ -1,3 +1,19 @@
+pve-qemu-kvm (10.2.1-2) trixie; urgency=medium
+
+  * build system: make: properly use DEB_HOST_ARCH variable instead of
+    DEB_BUILD_ARCH for .deb package names and upload target.
+
+  * build system: d/control: drop redundant library dependencies covered by
+    shlibs:Depends variable.
+
+  * fix misleading IO wait and pressure stall information (PSI) accounting
+    with io_uring-based event loop. A drive with IO thread being idle resulted
+    in nearly 100% IO pressure. This is resolved by telling io_uring to not
+    count blocking waits towards the IO wait metric when the event loop is
+    effectively idle.
+
+ -- Proxmox Support Team <support@proxmox.com>  Mon, 04 May 2026 11:52:48 +0200
+
 pve-qemu-kvm (10.2.1-1) trixie; urgency=medium
 
   * update QEMU and downstream patches for 10.2.1 release.
