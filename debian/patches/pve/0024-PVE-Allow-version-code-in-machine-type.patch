@@ -15,13 +15,13 @@ Signed-off-by: Thomas Lamprecht <t.lamprecht@proxmox.com>
 Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
 ---
  hw/core/machine-qmp-cmds.c |  5 +++++
- include/hw/boards.h        |  2 ++
+ include/hw/core/boards.h   |  2 ++
  qapi/machine.json          |  3 +++
  system/vl.c                | 24 ++++++++++++++++++++++++
  4 files changed, 34 insertions(+)
 
 diff --git a/hw/core/machine-qmp-cmds.c b/hw/core/machine-qmp-cmds.c
-index 55e4550cd4..6404fba525 100644
+index f4bd0f1616..47cbe16d46 100644
 --- a/hw/core/machine-qmp-cmds.c
 +++ b/hw/core/machine-qmp-cmds.c
 @@ -124,6 +124,11 @@ MachineInfoList *qmp_query_machines(bool has_compat_props, bool compat_props,
@@ -36,11 +36,11 @@ index 55e4550cd4..6404fba525 100644
          }
  
          if (default_cpu_type) {
-diff --git a/include/hw/boards.h b/include/hw/boards.h
-index a48ed4f86a..dfa1dc0bb7 100644
---- a/include/hw/boards.h
-+++ b/include/hw/boards.h
-@@ -273,6 +273,8 @@ struct MachineClass {
+diff --git a/include/hw/core/boards.h b/include/hw/core/boards.h
+index b8dad0a107..6c65576c71 100644
+--- a/include/hw/core/boards.h
++++ b/include/hw/core/boards.h
+@@ -268,6 +268,8 @@ struct MachineClass {
      const char *desc;
      const char *deprecation_reason;
  
@@ -50,10 +50,10 @@ index a48ed4f86a..dfa1dc0bb7 100644
      void (*reset)(MachineState *state, ResetType type);
      void (*wakeup)(MachineState *state);
 diff --git a/qapi/machine.json b/qapi/machine.json
-index e981da9fbb..992900fe77 100644
+index 5e4a82bdbd..acc635aa1d 100644
 --- a/qapi/machine.json
 +++ b/qapi/machine.json
-@@ -192,6 +192,8 @@
+@@ -194,6 +194,8 @@
  #
  # @acpi: machine type supports ACPI (since 8.0)
  #
@@ -62,7 +62,7 @@ index e981da9fbb..992900fe77 100644
  # @compat-props: The machine type's compatibility properties.  Only
  #     present when `query-machines` argument @compat-props is true.
  #     (since 9.1)
-@@ -208,6 +210,7 @@
+@@ -210,6 +212,7 @@
              'hotpluggable-cpus': 'bool',  'numa-mem-supported': 'bool',
              'deprecated': 'bool', '*default-cpu-type': 'str',
              '*default-ram-id': 'str', 'acpi': 'bool',
@@ -71,10 +71,10 @@ index e981da9fbb..992900fe77 100644
                                 'features': ['unstable'] } } }
  
 diff --git a/system/vl.c b/system/vl.c
-index 6bd8704c82..587956b30d 100644
+index 131adb4c3c..2abf709a0d 100644
 --- a/system/vl.c
 +++ b/system/vl.c
-@@ -1678,6 +1678,7 @@ static MachineClass *select_machine(QDict *qdict, Error **errp)
+@@ -1679,6 +1679,7 @@ static MachineClass *select_machine(QDict *qdict, Error **errp)
  {
      ERRP_GUARD();
      const char *machine_type = qdict_get_try_str(qdict, "type");
@@ -82,7 +82,7 @@ index 6bd8704c82..587956b30d 100644
      g_autoptr(GSList) machines = object_class_get_list(target_machine_typename(),
                                                         false);
      MachineClass *machine_class = NULL;
-@@ -1698,7 +1699,11 @@ static MachineClass *select_machine(QDict *qdict, Error **errp)
+@@ -1699,7 +1700,11 @@ static MachineClass *select_machine(QDict *qdict, Error **errp)
      if (!machine_class) {
          error_append_hint(errp,
                            "Use -machine help to list supported machines\n");
@@ -94,7 +94,7 @@ index 6bd8704c82..587956b30d 100644
      return machine_class;
  }
  
-@@ -3417,12 +3422,31 @@ void qemu_init(int argc, char **argv)
+@@ -3412,12 +3417,31 @@ void qemu_init(int argc, char **argv)
              case QEMU_OPTION_machine:
                  {
                      bool help;

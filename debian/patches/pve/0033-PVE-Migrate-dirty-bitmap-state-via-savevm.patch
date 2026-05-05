@@ -26,10 +26,10 @@ Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
  create mode 100644 migration/pbs-state.c
 
 diff --git a/include/migration/misc.h b/include/migration/misc.h
-index e26d418a6e..551898d7bf 100644
+index 3159a5e53c..b7162b1fca 100644
 --- a/include/migration/misc.h
 +++ b/include/migration/misc.h
-@@ -152,4 +152,7 @@ bool multifd_device_state_save_thread_should_exit(void);
+@@ -156,4 +156,7 @@ bool multifd_device_state_save_thread_should_exit(void);
  void multifd_abort_device_state_save_threads(void);
  bool multifd_join_device_state_save_threads(void);
  
@@ -38,7 +38,7 @@ index e26d418a6e..551898d7bf 100644
 +
  #endif
 diff --git a/migration/meson.build b/migration/meson.build
-index 140264b477..23aa5b3caa 100644
+index 90d62d5723..6010ccaef0 100644
 --- a/migration/meson.build
 +++ b/migration/meson.build
 @@ -8,6 +8,7 @@ migration_files = files(
@@ -58,10 +58,10 @@ index 140264b477..23aa5b3caa 100644
    'ram.c',
    'savevm.c',
 diff --git a/migration/migration.c b/migration/migration.c
-index b316ee01ab..1eae33bc73 100644
+index 5c9aaa6e58..23b05a64cf 100644
 --- a/migration/migration.c
 +++ b/migration/migration.c
-@@ -337,6 +337,7 @@ void migration_object_init(void)
+@@ -329,6 +329,7 @@ void migration_object_init(void)
  
      /* Initialize cpu throttle timers */
      cpu_throttle_init();
@@ -192,10 +192,10 @@ index 177fb851b4..7575abab7c 100644
      ret->pbs_masterkey = true;
      ret->backup_max_workers = true;
 diff --git a/qapi/block-core.json b/qapi/block-core.json
-index e0f44067e0..f1679264bb 100644
+index 84a4572625..4a6769c053 100644
 --- a/qapi/block-core.json
 +++ b/qapi/block-core.json
-@@ -1107,6 +1107,11 @@
+@@ -1112,6 +1112,11 @@
  # @pbs-dirty-bitmap-savevm: True if 'dirty-bitmaps' migration
  #     capability can safely be set for savevm-async.
  #
@@ -207,7 +207,7 @@ index e0f44067e0..f1679264bb 100644
  # @pbs-masterkey: True if the QMP backup call supports the
  #     'master_keyfile' parameter.
  #
-@@ -1121,6 +1126,7 @@
+@@ -1126,6 +1131,7 @@
    'data': { 'pbs-dirty-bitmap': 'bool',
              'query-bitmap-info': 'bool',
              'pbs-dirty-bitmap-savevm': 'bool',

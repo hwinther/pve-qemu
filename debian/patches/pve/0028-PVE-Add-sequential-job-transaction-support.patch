@@ -11,10 +11,10 @@ Signed-off-by: Thomas Lamprecht <t.lamprecht@proxmox.com>
  2 files changed, 46 insertions(+)
 
 diff --git a/include/qemu/job.h b/include/qemu/job.h
-index ead31578d3..2ed533de6f 100644
+index 0e40e8b457..f4fff5fa0d 100644
 --- a/include/qemu/job.h
 +++ b/include/qemu/job.h
-@@ -362,6 +362,18 @@ void job_unlock(void);
+@@ -364,6 +364,18 @@ void job_unlock(void);
   */
  JobTxn *job_txn_new(void);
  
@@ -34,7 +34,7 @@ index ead31578d3..2ed533de6f 100644
   * Release a reference that was previously acquired with job_txn_add_job or
   * job_txn_new. If it's the last reference to the object, it will be freed.
 diff --git a/job.c b/job.c
-index b981070ee8..f4646866ec 100644
+index 5120a01265..353a0216cd 100644
 --- a/job.c
 +++ b/job.c
 @@ -94,6 +94,8 @@ struct JobTxn {

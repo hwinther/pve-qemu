@@ -21,10 +21,10 @@ Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
  1 file changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/block/io.c b/block/io.c
-index c4a4301321..1865f226d5 100644
+index e8fb4ede4d..82e3383e8d 100644
 --- a/block/io.c
 +++ b/block/io.c
-@@ -1917,7 +1917,8 @@ bdrv_co_do_pwrite_zeroes(BlockDriverState *bs, int64_t offset, int64_t bytes,
+@@ -1918,7 +1918,8 @@ bdrv_co_do_pwrite_zeroes(BlockDriverState *bs, int64_t offset, int64_t bytes,
              assert(!bs->supported_zero_flags);
          }
  

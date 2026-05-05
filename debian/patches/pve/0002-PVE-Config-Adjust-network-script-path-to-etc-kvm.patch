@@ -9,7 +9,7 @@ Signed-off-by: Thomas Lamprecht <t.lamprecht@proxmox.com>
  1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/include/net/net.h b/include/net/net.h
-index 72b476ee1d..f257fc7401 100644
+index 45bc86fc86..f9271b4729 100644
 --- a/include/net/net.h
 +++ b/include/net/net.h
 @@ -325,8 +325,8 @@ void netdev_add(QemuOpts *opts, Error **errp);

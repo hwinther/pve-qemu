@@ -271,7 +271,7 @@ index 0000000000..17ae2cb261
 +
 +#endif /* QIO_CHANNEL_SAVEVM_ASYNC_H */
 diff --git a/migration/meson.build b/migration/meson.build
-index 16909d54c5..e79f95bb6c 100644
+index c9f0f5f9f2..0222d5ea6e 100644
 --- a/migration/meson.build
 +++ b/migration/meson.build
 @@ -14,6 +14,7 @@ system_ss.add(files(

@@ -18,13 +18,13 @@ single major PVE release.
 
 Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
 ---
- include/hw/boards.h | 99 ++++++++++++++++++++++++++-------------------
+ include/hw/core/boards.h | 99 +++++++++++++++++++++++-----------------
  1 file changed, 58 insertions(+), 41 deletions(-)
 
-diff --git a/include/hw/boards.h b/include/hw/boards.h
-index dfa1dc0bb7..ca5c7ed0b9 100644
---- a/include/hw/boards.h
-+++ b/include/hw/boards.h
+diff --git a/include/hw/core/boards.h b/include/hw/core/boards.h
+index 6c65576c71..04665f0c53 100644
+--- a/include/hw/core/boards.h
++++ b/include/hw/core/boards.h
 @@ -672,40 +672,57 @@ struct MachineState {
  
  

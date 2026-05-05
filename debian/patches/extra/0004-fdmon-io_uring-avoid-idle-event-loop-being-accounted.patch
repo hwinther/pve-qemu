@@ -48,15 +48,15 @@ Co-authored-by: Fiona Ebner <f.ebner@proxmox.com>
 Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
 Signed-off-by: Thomas Lamprecht <t.lamprecht@proxmox.com>
 ---
- include/block/aio.h   | 12 ++++++++++++
+ include/qemu/aio.h    | 12 ++++++++++++
  util/fdmon-io_uring.c | 36 +++++++++++++++++++++++++++++++++++-
  2 files changed, 47 insertions(+), 1 deletion(-)
 
-diff --git a/include/block/aio.h b/include/block/aio.h
-index 6049e6a0f4..f7750bc2f8 100644
---- a/include/block/aio.h
-+++ b/include/block/aio.h
-@@ -77,6 +77,12 @@ struct CqeHandler {
+diff --git a/include/qemu/aio.h b/include/qemu/aio.h
+index 8cca2360d1..87ee898429 100644
+--- a/include/qemu/aio.h
++++ b/include/qemu/aio.h
+@@ -55,6 +55,12 @@ struct CqeHandler {
  
      /* This field is filled in before ->cb() is called */
      struct io_uring_cqe cqe;
@@ -69,7 +69,7 @@ index 6049e6a0f4..f7750bc2f8 100644
  };
  
  typedef QSIMPLEQ_HEAD(, CqeHandler) CqeHandlerSimpleQ;
-@@ -317,6 +323,12 @@ struct AioContext {
+@@ -295,6 +301,12 @@ struct AioContext {
  
      /* Pending callback state for cqe handlers */
      CqeHandlerSimpleQ cqe_handler_ready_list;

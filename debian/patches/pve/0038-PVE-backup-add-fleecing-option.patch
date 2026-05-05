@@ -147,7 +147,7 @@ index eb93364e85..6a6dbf90f5 100644
  
  #endif /* COPY_BEFORE_WRITE_H */
 diff --git a/block/monitor/block-hmp-cmds.c b/block/monitor/block-hmp-cmds.c
-index b7668139de..9e84ba164d 100644
+index c5c1fcd583..3b9c3d223e 100644
 --- a/block/monitor/block-hmp-cmds.c
 +++ b/block/monitor/block-hmp-cmds.c
 @@ -1051,6 +1051,7 @@ void coroutine_fn hmp_backup(Monitor *mon, const QDict *qdict)
@@ -429,10 +429,10 @@ index 7575abab7c..8b83465ebd 100644
      return ret;
  }
 diff --git a/qapi/block-core.json b/qapi/block-core.json
-index 6d8c2df22b..ea73974495 100644
+index 8af4107bf5..5c8b872000 100644
 --- a/qapi/block-core.json
 +++ b/qapi/block-core.json
-@@ -1049,6 +1049,10 @@
+@@ -1054,6 +1054,10 @@
  #
  # @max-workers: see @BackupPerf for details.  Default 16.
  #
@@ -443,7 +443,7 @@ index 6d8c2df22b..ea73974495 100644
  # Returns: the uuid of the backup job
  #
  ##
-@@ -1069,7 +1073,8 @@
+@@ -1074,7 +1078,8 @@
                                      '*firewall-file': 'str',
                                      '*devlist': 'str',
                                      '*speed': 'int',
@@ -453,7 +453,7 @@ index 6d8c2df22b..ea73974495 100644
    'returns': 'UuidInfo', 'coroutine': true }
  
  ##
-@@ -1118,6 +1123,8 @@
+@@ -1123,6 +1128,8 @@
  # @pbs-library-version: Running version of libproxmox-backup-qemu0
  #     library.
  #
@@ -462,7 +462,7 @@ index 6d8c2df22b..ea73974495 100644
  # @backup-max-workers: Whether the 'max-workers' @BackupPerf setting
  #     is supported or not.
  #
-@@ -1129,6 +1136,7 @@
+@@ -1134,6 +1141,7 @@
              'pbs-dirty-bitmap-migration': 'bool',
              'pbs-masterkey': 'bool',
              'pbs-library-version': 'str',

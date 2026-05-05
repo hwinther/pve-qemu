@@ -34,7 +34,7 @@ Signed-off-by: Stefan Reiter <s.reiter@proxmox.com>
      improve setting state in savevm-end handler
      improve runstate preservation
      use dedicated iothread for state file to avoid deadlock, bug #6262
-     rebase for 10.1.0]
+     rebase for 11.0.0]
 Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
 ---
  hmp-commands-info.hx         |  13 +
@@ -52,7 +52,7 @@ Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
  create mode 100644 migration/savevm-async.c
 
 diff --git a/hmp-commands-info.hx b/hmp-commands-info.hx
-index 41674dcbe1..9b6cc87127 100644
+index 74c741f80e..723f799ff2 100644
 --- a/hmp-commands-info.hx
 +++ b/hmp-commands-info.hx
 @@ -530,6 +530,19 @@ SRST
@@ -112,7 +112,7 @@ index 9e4dcaaa75..2581730d74 100644
 +
  #endif
 diff --git a/include/monitor/hmp.h b/include/monitor/hmp.h
-index 83721b5ffc..f05423ceda 100644
+index e222bea60c..abebfea0e2 100644
 --- a/include/monitor/hmp.h
 +++ b/include/monitor/hmp.h
 @@ -29,6 +29,7 @@ void hmp_info_status(Monitor *mon, const QDict *qdict);
@@ -133,7 +133,7 @@ index 83721b5ffc..f05423ceda 100644
  void coroutine_fn hmp_screendump(Monitor *mon, const QDict *qdict);
  void hmp_chardev_add(Monitor *mon, const QDict *qdict);
 diff --git a/migration/meson.build b/migration/meson.build
-index e79f95bb6c..140264b477 100644
+index 0222d5ea6e..90d62d5723 100644
 --- a/migration/meson.build
 +++ b/migration/meson.build
 @@ -35,6 +35,7 @@ system_ss.add(files(
@@ -143,10 +143,10 @@ index e79f95bb6c..140264b477 100644
 +  'savevm-async.c',
    'socket.c',
    'tls.c',
-   'threadinfo.c',
+ ), gnutls, zlib)
 diff --git a/migration/savevm-async.c b/migration/savevm-async.c
 new file mode 100644
-index 0000000000..5c22c29b9a
+index 0000000000..d973d8300c
 --- /dev/null
 +++ b/migration/savevm-async.c
 @@ -0,0 +1,586 @@
@@ -340,7 +340,7 @@ index 0000000000..5c22c29b9a
 +
 +    if (!aborted) {
 +        /* skip state saving if we aborted, snapshot will be invalid anyway */
-+        (void)qemu_savevm_state_complete_precopy(snap_state.file, false);
++        (void)qemu_savevm_state_complete_precopy(ms);
 +        ret = qemu_file_get_error(snap_state.file);
 +        if (ret < 0) {
 +            save_snapshot_error("qemu_savevm_state_complete_precopy error %d", ret);
@@ -585,7 +585,7 @@ index 0000000000..5c22c29b9a
 +    snap_state.state = SAVE_STATE_ACTIVE;
 +    snap_state.finalize_bh = qemu_bh_new(process_savevm_finalize, &snap_state);
 +    qemu_savevm_state_header(snap_state.file);
-+    ret = qemu_savevm_state_setup(snap_state.file, &local_err);
++    ret = qemu_savevm_state_do_setup(snap_state.file, &local_err);
 +    if (ret != 0) {
 +        error_setg_errno(errp, -ret, "savevm state setup failed: %s",
 +                         local_err ? error_get_pretty(local_err) : "unknown error");
@@ -737,10 +737,10 @@ index 0000000000..5c22c29b9a
 +    return ret;
 +}
 diff --git a/monitor/hmp-cmds.c b/monitor/hmp-cmds.c
-index 33a88ce205..7af9fed7ea 100644
+index bc26b39d70..cbedf13103 100644
 --- a/monitor/hmp-cmds.c
 +++ b/monitor/hmp-cmds.c
-@@ -24,6 +24,7 @@
+@@ -27,6 +27,7 @@
  #include "qapi/error.h"
  #include "qapi/qapi-commands-control.h"
  #include "qapi/qapi-commands-machine.h"
@@ -748,11 +748,10 @@ index 33a88ce205..7af9fed7ea 100644
  #include "qapi/qapi-commands-misc.h"
  #include "qobject/qdict.h"
  #include "qemu/cutils.h"
-@@ -435,3 +436,40 @@ void hmp_dumpdtb(Monitor *mon, const QDict *qdict)
-     monitor_printf(mon, "DTB dumped to '%s'\n", filename);
+@@ -442,6 +443,43 @@ void hmp_dumpdtb(Monitor *mon, const QDict *qdict)
  }
  #endif
-+
+ 
 +void hmp_savevm_start(Monitor *mon, const QDict *qdict)
 +{
 +    Error *errp = NULL;
@@ -789,11 +788,15 @@ index 33a88ce205..7af9fed7ea 100644
 +        monitor_printf(mon, "Error: %s\n", info->error);
 +    }
 +}
++
+ /* Set the current CPU defined by the user. Callers must hold BQL. */
+ int monitor_set_cpu(Monitor *mon, int cpu_index)
+ {
 diff --git a/qapi/migration.json b/qapi/migration.json
-index cf023bd29d..f21d06c5a4 100644
+index 7134d4ce47..8dc8d52b23 100644
 --- a/qapi/migration.json
 +++ b/qapi/migration.json
-@@ -330,6 +330,40 @@
+@@ -333,6 +333,40 @@
             '*dirty-limit-throttle-time-per-round': 'uint64',
             '*dirty-limit-ring-full-time': 'uint64'} }
  
@@ -864,10 +867,10 @@ index 28c641fe2f..5d2f12259a 100644
  # @CommandLineParameterType:
  #
 diff --git a/qemu-options.hx b/qemu-options.hx
-index fca2b7bc74..99c04c5ab9 100644
+index 21972f8326..20171ab2e8 100644
 --- a/qemu-options.hx
 +++ b/qemu-options.hx
-@@ -5085,6 +5085,18 @@ SRST
+@@ -5169,6 +5169,18 @@ SRST
      Start right away with a saved state (``loadvm`` in monitor)
  ERST
  
@@ -887,10 +890,10 @@ index fca2b7bc74..99c04c5ab9 100644
  DEF("daemonize", 0, QEMU_OPTION_daemonize, \
      "-daemonize      daemonize QEMU after initializing\n", QEMU_ARCH_ALL)
 diff --git a/system/vl.c b/system/vl.c
-index 5091fe52d9..ab845eb634 100644
+index 246623b319..dc317a3e50 100644
 --- a/system/vl.c
 +++ b/system/vl.c
-@@ -174,6 +174,7 @@ static const char *accelerators;
+@@ -173,6 +173,7 @@ static const char *accelerators;
  static bool have_custom_ram_size;
  static const char *ram_memdev_id;
  static QDict *machine_opts_dict;
@@ -898,7 +901,7 @@ index 5091fe52d9..ab845eb634 100644
  static QTAILQ_HEAD(, ObjectOption) object_opts = QTAILQ_HEAD_INITIALIZER(object_opts);
  static QTAILQ_HEAD(, DeviceOption) device_opts = QTAILQ_HEAD_INITIALIZER(device_opts);
  static int display_remote;
-@@ -2817,6 +2818,12 @@ void qmp_x_exit_preconfig(Error **errp)
+@@ -2814,6 +2815,12 @@ void qmp_x_exit_preconfig(Error **errp)
          RunState state = autostart ? RUN_STATE_RUNNING : runstate_get();
          load_snapshot(loadvm, NULL, false, NULL, &error_fatal);
          load_snapshot_resume(state);
@@ -911,7 +914,7 @@ index 5091fe52d9..ab845eb634 100644
      }
      if (replay_mode != REPLAY_MODE_NONE) {
          replay_vmstate_init();
-@@ -3363,6 +3370,9 @@ void qemu_init(int argc, char **argv)
+@@ -3358,6 +3365,9 @@ void qemu_init(int argc, char **argv)
              case QEMU_OPTION_loadvm:
                  loadvm = optarg;
                  break;

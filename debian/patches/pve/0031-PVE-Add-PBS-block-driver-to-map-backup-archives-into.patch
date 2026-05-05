@@ -348,10 +348,10 @@ index 0000000000..3e41421716
 +
 +block_init(bdrv_pbs_init);
 diff --git a/meson.build b/meson.build
-index 73f6e2e93b..b717cad2f9 100644
+index 3a57c44ade..eb84d64604 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -4986,7 +4986,7 @@ summary_info += {'Query Processing Library support': qpl}
+@@ -4997,7 +4997,7 @@ summary_info += {'Query Processing Library support': qpl}
  summary_info += {'UADK Library support': uadk}
  summary_info += {'qatzip support':    qatzip}
  summary_info += {'NUMA host support': numa}
@@ -361,10 +361,10 @@ index 73f6e2e93b..b717cad2f9 100644
  summary_info += {'libdaxctl support': libdaxctl}
  summary_info += {'libcbor support':   libcbor}
 diff --git a/qapi/block-core.json b/qapi/block-core.json
-index 693a123e94..e0f44067e0 100644
+index 4f407007b9..84a4572625 100644
 --- a/qapi/block-core.json
 +++ b/qapi/block-core.json
-@@ -3614,6 +3614,7 @@
+@@ -3619,6 +3619,7 @@
              'parallels', 'preallocate', 'qcow', 'qcow2', 'qed', 'quorum',
              'raw', 'rbd',
              { 'name': 'replication', 'if': 'CONFIG_REPLICATION' },
@@ -372,7 +372,7 @@ index 693a123e94..e0f44067e0 100644
              'ssh', 'throttle', 'vdi', 'vhdx',
              { 'name': 'virtio-blk-vfio-pci', 'if': 'CONFIG_BLKIO' },
              { 'name': 'virtio-blk-vhost-user', 'if': 'CONFIG_BLKIO' },
-@@ -3700,6 +3701,33 @@
+@@ -3705,6 +3706,33 @@
  { 'struct': 'BlockdevOptionsNull',
    'data': { '*size': 'int', '*latency-ns': 'uint64', '*read-zeroes': 'bool' } }
  
@@ -406,7 +406,7 @@ index 693a123e94..e0f44067e0 100644
  ##
  # @BlockdevOptionsNVMe:
  #
-@@ -5147,6 +5175,7 @@
+@@ -5149,6 +5177,7 @@
        'nfs':        'BlockdevOptionsNfs',
        'null-aio':   'BlockdevOptionsNull',
        'null-co':    'BlockdevOptionsNull',
@@ -415,10 +415,10 @@ index 693a123e94..e0f44067e0 100644
        'nvme-io_uring': { 'type': 'BlockdevOptionsNvmeIoUring',
                           'if': 'CONFIG_BLKIO' },
 diff --git a/qapi/pragma.json b/qapi/pragma.json
-index 6aaa9cb975..e9c595c4ba 100644
+index 8c7a31beaf..93c7bc73d9 100644
 --- a/qapi/pragma.json
 +++ b/qapi/pragma.json
-@@ -91,6 +91,7 @@
+@@ -93,6 +93,7 @@
          'BlockInfo',                # query-block
          'BlockdevAioOptions',       # blockdev-add, -blockdev
          'BlockdevDriver',           # blockdev-add, query-blockstats, ...

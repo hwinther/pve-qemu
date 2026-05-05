@@ -740,10 +740,10 @@ index 0000000000..9ebeef7c8f
 +
 +#endif /* PVE_BACKUP_H */
 diff --git a/qapi/block-core.json b/qapi/block-core.json
-index ea73974495..52b750dbb3 100644
+index 5c8b872000..cf4f5ce7f1 100644
 --- a/qapi/block-core.json
 +++ b/qapi/block-core.json
-@@ -1123,6 +1123,9 @@
+@@ -1128,6 +1128,9 @@
  # @pbs-library-version: Running version of libproxmox-backup-qemu0
  #     library.
  #
@@ -753,7 +753,7 @@ index ea73974495..52b750dbb3 100644
  # @backup-fleecing: Whether backup fleecing is supported or not.
  #
  # @backup-max-workers: Whether the 'max-workers' @BackupPerf setting
-@@ -1136,6 +1139,7 @@
+@@ -1141,6 +1144,7 @@
              'pbs-dirty-bitmap-migration': 'bool',
              'pbs-masterkey': 'bool',
              'pbs-library-version': 'str',
@@ -761,7 +761,7 @@ index ea73974495..52b750dbb3 100644
              'backup-fleecing': 'bool',
              'backup-max-workers': 'bool' } }
  
-@@ -1167,9 +1171,16 @@
+@@ -1172,9 +1176,16 @@
  #     associated base snapshot did not match the base given for the
  #     current job or the crypt mode has changed.
  #
@@ -779,7 +779,7 @@ index ea73974495..52b750dbb3 100644
  
  ##
  # @PBSBitmapInfo:
-@@ -1203,6 +1214,98 @@
+@@ -1208,6 +1219,98 @@
  ##
  { 'command': 'query-pbs-bitmap-info', 'returns': ['PBSBitmapInfo'] }
  
@@ -879,10 +879,10 @@ index ea73974495..52b750dbb3 100644
  # @BlockDeviceTimedStats:
  #
 diff --git a/system/runstate.c b/system/runstate.c
-index e3ec16ab74..d471fbece9 100644
+index 2d4e95a216..49a6d5f268 100644
 --- a/system/runstate.c
 +++ b/system/runstate.c
-@@ -60,6 +60,7 @@
+@@ -62,6 +62,7 @@
  #include "system/system.h"
  #include "system/tpm.h"
  #include "trace.h"
@@ -890,7 +890,7 @@ index e3ec16ab74..d471fbece9 100644
  
  static NotifierList exit_notifiers =
      NOTIFIER_LIST_INITIALIZER(exit_notifiers);
-@@ -989,6 +990,11 @@ void qemu_cleanup(int status)
+@@ -1031,6 +1032,11 @@ void qemu_cleanup(int status)
       * requests happening from here on anyway.
       */
      bdrv_drain_all_begin();

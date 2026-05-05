@@ -13,7 +13,7 @@ Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
  1 file changed, 9 insertions(+)
 
 diff --git a/hw/intc/apic_common.c b/hw/intc/apic_common.c
-index ec9e978b0b..f4e7072fc4 100644
+index bf4abc21d7..3acb881e26 100644
 --- a/hw/intc/apic_common.c
 +++ b/hw/intc/apic_common.c
 @@ -245,6 +245,15 @@ static void apic_reset_common(DeviceState *dev)

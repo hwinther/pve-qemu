@@ -13,7 +13,7 @@ Signed-off-by: Dietmar Maurer <dietmar@proxmox.com>
  2 files changed, 9 insertions(+), 1 deletion(-)
 
 diff --git a/hw/core/machine-qmp-cmds.c b/hw/core/machine-qmp-cmds.c
-index 28dfd3e15b..55e4550cd4 100644
+index e62cb4ec88..f4bd0f1616 100644
 --- a/hw/core/machine-qmp-cmds.c
 +++ b/hw/core/machine-qmp-cmds.c
 @@ -120,6 +120,12 @@ MachineInfoList *qmp_query_machines(bool has_compat_props, bool compat_props,
@@ -30,10 +30,10 @@ index 28dfd3e15b..55e4550cd4 100644
              info->default_cpu_type = g_strdup(default_cpu_type);
          }
 diff --git a/qapi/machine.json b/qapi/machine.json
-index 0eaf36b0fe..e981da9fbb 100644
+index 30ab4a3b01..5e4a82bdbd 100644
 --- a/qapi/machine.json
 +++ b/qapi/machine.json
-@@ -170,6 +170,8 @@
+@@ -172,6 +172,8 @@
  #
  # @is-default: whether the machine is default
  #
@@ -42,7 +42,7 @@ index 0eaf36b0fe..e981da9fbb 100644
  # @cpu-max: maximum number of CPUs supported by the machine type
  #     (since 1.5)
  #
-@@ -202,7 +204,7 @@
+@@ -204,7 +206,7 @@
  ##
  { 'struct': 'MachineInfo',
    'data': { 'name': 'str', '*alias': 'str',

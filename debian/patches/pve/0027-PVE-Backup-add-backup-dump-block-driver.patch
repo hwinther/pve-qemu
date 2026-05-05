@@ -259,17 +259,17 @@ index 1373612c10..6278c4af0f 100644
    'blklogwrites.c',
    'blkverify.c',
 diff --git a/include/block/block_int-common.h b/include/block/block_int-common.h
-index cb0143ea77..a5e85cff46 100644
+index 147c08155f..41c82fc1ab 100644
 --- a/include/block/block_int-common.h
 +++ b/include/block/block_int-common.h
-@@ -26,6 +26,7 @@
+@@ -25,6 +25,7 @@
+ #define BLOCK_INT_COMMON_H
  
- #include "block/aio.h"
  #include "block/block-common.h"
 +#include "block/block-copy.h"
  #include "block/block-global-state.h"
  #include "block/snapshot.h"
- #include "qemu/iov.h"
+ #include "qemu/aiocb.h"
 @@ -60,6 +61,40 @@
  
  #define BLOCK_PROBE_BUF_SIZE        512
@@ -312,7 +312,7 @@ index cb0143ea77..a5e85cff46 100644
      BDRV_TRACKED_READ,
      BDRV_TRACKED_WRITE,
 diff --git a/job.c b/job.c
-index 0653bc2ba6..b981070ee8 100644
+index e747908472..5120a01265 100644
 --- a/job.c
 +++ b/job.c
 @@ -337,7 +337,8 @@ static bool job_started_locked(Job *job)

@@ -33,7 +33,7 @@ index e3da77632a..cf58718ece 100644
    'if': 'CONFIG_SPICE' }
  
 diff --git a/ui/spice-core.c b/ui/spice-core.c
-index 25e891e4ba..daad8a7f1f 100644
+index 6d6560ae80..2e1de49de4 100644
 --- a/ui/spice-core.c
 +++ b/ui/spice-core.c
 @@ -556,6 +556,10 @@ static SpiceInfo *qmp_query_spice_real(Error **errp)

@@ -89,10 +89,10 @@ index 80b75ad5cb..f8417347a1 100644
   * @migrate_add_blocker - prevent all modes of migration from proceeding
   *
 diff --git a/migration/migration.c b/migration/migration.c
-index 1eae33bc73..979ebac75e 100644
+index 23b05a64cf..8acd9610de 100644
 --- a/migration/migration.c
 +++ b/migration/migration.c
-@@ -2063,6 +2063,30 @@ bool migration_is_blocked(Error **errp)
+@@ -1886,6 +1886,30 @@ bool migration_is_blocked(Error **errp)
      return false;
  }
  
@@ -124,10 +124,10 @@ index 1eae33bc73..979ebac75e 100644
  static bool migrate_prepare(MigrationState *s, bool resume, Error **errp)
  {
 diff --git a/migration/migration.h b/migration/migration.h
-index 213b33fe6e..c95eca727e 100644
+index b6888daced..80eb0dcd1f 100644
 --- a/migration/migration.h
 +++ b/migration/migration.h
-@@ -535,6 +535,7 @@ int migration_call_notifiers(MigrationState *s, MigrationEventType type,
+@@ -542,6 +542,7 @@ int migration_call_notifiers(MigrationEventType type, Error **errp);
  
  int migrate_init(MigrationState *s, Error **errp);
  bool migration_is_blocked(Error **errp);
@@ -136,7 +136,7 @@ index 213b33fe6e..c95eca727e 100644
  bool migration_in_postcopy(void);
  bool migration_postcopy_is_alive(MigrationStatus state);
 diff --git a/migration/savevm-async.c b/migration/savevm-async.c
-index 9942557455..8f498151bd 100644
+index edc4c5b6ac..acd1a4de6e 100644
 --- a/migration/savevm-async.c
 +++ b/migration/savevm-async.c
 @@ -375,7 +375,7 @@ void qmp_savevm_start(const char *statefile, Error **errp)
