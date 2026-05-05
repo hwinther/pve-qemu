@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Vladimir Sementsov-Ogievskiy <vsementsov@yandex-team.ru>
+Date: Thu, 5 Mar 2026 00:22:45 +0300
+Subject: [PATCH] migration: vmstate_save_state_v: fix double error_setg
+
+We may call error_setg twice on same errp if inner
+vmstate_save_state_v() or vmstate_save_state() call fails. Next we will
+crash on assertion in error_setv().
+
+Fixes: 848a0503422d043 "migration: Update error description outside migration.c"
+Signed-off-by: Vladimir Sementsov-Ogievskiy <vsementsov@yandex-team.ru>
+Reviewed-by: Fabiano Rosas <farosas@suse.de>
+Reviewed-by: Peter Xu <peterx@redhat.com>
+Link: https://lore.kernel.org/qemu-devel/20260304212303.667141-2-vsementsov@yandex-team.ru
+Signed-off-by: Fabiano Rosas <farosas@suse.de>
+(cherry picked from commit d41ce10d0f5a3d6e497e4b75807a8e675033c597)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ migration/vmstate.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/migration/vmstate.c b/migration/vmstate.c
+index 4d28364f7b..fccd030dfd 100644
+--- a/migration/vmstate.c
++++ b/migration/vmstate.c
+@@ -539,6 +539,9 @@ int vmstate_save_state_v(QEMUFile *f, const VMStateDescription *vmsd,
+                 } else {
+                     ret = inner_field->info->put(f, curr_elem, size,
+                                                  inner_field, vmdesc_loop);
++                    if (ret < 0) {
++                        error_setg(errp, "put failed");
++                    }
+                 }
+ 
+                 written_bytes = qemu_file_transferred(f) - old_offset;
+@@ -551,8 +554,8 @@ int vmstate_save_state_v(QEMUFile *f, const VMStateDescription *vmsd,
+                 }
+ 
+                 if (ret) {
+-                    error_setg(errp, "Save of field %s/%s failed",
+-                                vmsd->name, field->name);
++                    error_prepend(errp, "Save of field %s/%s failed: ",
++                                  vmsd->name, field->name);
+                     if (vmsd->post_save) {
+                         vmsd->post_save(opaque);
+                     }

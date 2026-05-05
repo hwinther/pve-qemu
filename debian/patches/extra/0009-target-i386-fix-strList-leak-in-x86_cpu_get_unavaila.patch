@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Mon, 13 Apr 2026 16:50:40 +0400
+Subject: [PATCH] target/i386: fix strList leak in
+ x86_cpu_get_unavailable_features
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The result list built by x86_cpu_list_feature_names() was never freed
+after being visited, causing a memory leak detected by ASan.
+(the getter visitor is VISITOR_OUTPUT kind and doesn't own data)
+
+Fixes: 506174bf8219 ("i386: "unavailable-features" QOM property")
+Signed-off-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+Link: https://lore.kernel.org/r/20260413125040.3842686-1-marcandre.lureau@redhat.com
+Cc: qemu-stable@nongnu.org
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry picked from commit 87e1226e6f6844845ac407d50198d84205e7ed7f)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ target/i386/cpu.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/target/i386/cpu.c b/target/i386/cpu.c
+index c6fd1dc00e..9d126600c0 100644
+--- a/target/i386/cpu.c
++++ b/target/i386/cpu.c
+@@ -7842,6 +7842,7 @@ static void x86_cpu_get_unavailable_features(Object *obj, Visitor *v,
+ 
+     x86_cpu_list_feature_names(xc->filtered_features, &result);
+     visit_type_strList(v, "unavailable-features", &result, errp);
++    qapi_free_strList(result);
+ }
+ 
+ /* Print all cpuid feature names in featureset

@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Simon Scherer <scherer.simon89@gmail.com>
+Date: Mon, 13 Apr 2026 13:56:22 +0200
+Subject: [PATCH] target/i386: fix missing PF_INSTR in SIGSEGV context
+
+When running linux-user emulation, the SIGSEGV handler does not
+correctly set the 4th bit (PF_INSTR) in the error_code variable of
+the context argument (context->uc_mcontext.gregs[REG_ERR]).
+
+Because this bit is never set, guest applications cannot distinguish
+if a fault was due to missing executable permissions. This patch
+ensures that when a page fault occurs during an instruction fetch,
+the PF_INSTR flag is properly populated in the signal context.
+
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/3384
+Signed-off-by: Simon Scherer <scherer.simon89@gmail.com>
+Link: https://lore.kernel.org/r/20260413115622.160212-1-scherer.simon89@gmail.com
+Cc: qemu-stable@nongnu.org
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry picked from commit 3eae91a8b93a35f194a39ab5b894ae405def9270)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ target/i386/tcg/user/excp_helper.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/target/i386/tcg/user/excp_helper.c b/target/i386/tcg/user/excp_helper.c
+index 98fab4cbc3..6c5df5e0e8 100644
+--- a/target/i386/tcg/user/excp_helper.c
++++ b/target/i386/tcg/user/excp_helper.c
+@@ -36,9 +36,10 @@ void x86_cpu_record_sigsegv(CPUState *cs, vaddr addr,
+      * signal and set exception_index to EXCP_INTERRUPT.
+      */
+     env->cr[2] = addr;
+-    env->error_code = ((access_type == MMU_DATA_STORE) << PG_ERROR_W_BIT)
+-                    | (maperr ? 0 : PG_ERROR_P_MASK)
+-                    | PG_ERROR_U_MASK;
++    env->error_code = (maperr ? 0 : PG_ERROR_P_MASK)
++                    | ((access_type == MMU_DATA_STORE) << PG_ERROR_W_BIT)
++                    | PG_ERROR_U_MASK
++                    | ((access_type == MMU_INST_FETCH) ? PG_ERROR_I_D_MASK : 0);
+     cs->exception_index = EXCP0E_PAGE;
+ 
+     /* Disable do_interrupt_user. */

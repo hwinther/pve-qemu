@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: rickgcn <rickgcn@gmail.com>
+Date: Sat, 18 Apr 2026 14:14:29 +0800
+Subject: [PATCH] hw: i386: vapic: restore IRQ polling for non-kernel irqchip
+ backends
+
+69dfc078 extended vAPIC handling for WHPX with user-mode irqchip, but it
+also changed vapic_write() case 4 in a way that excludes TCG from
+apic_poll_irq().
+
+Before that change, IRQ polling happened whenever no in-kernel irqchip
+was active. After the change, it only happened for KVM or WHPX with a
+user-mode irqchip. Under TCG, both kvm_enabled() and whpx_enabled() are
+false, so the poll never happens.
+
+This regresses 32-bit Windows XP guests on a Windows host with
+-machine pc-i440fx-10.0,accel=tcg, causing a STOP 0x0000000A during boot.
+
+Fix it by making the decision depend on whether KVM or WHPX is using an
+in-kernel irqchip, instead of whether either accelerator is enabled.
+
+Fixes: 69dfc078a6f0 ("hw: i386: vapic: enable on WHPX with user-mode irqchip")
+
+Signed-off-by: rickgcn <rickgcn@gmail.com>
+Link: https://lore.kernel.org/r/20260418061429.16898-1-rickgcn@gmail.com
+Cc: qemu-stable@nongnu.org
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry picked from commit c906c2337058bd467e6ac0176c2966d1eeb6f8f5)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/i386/vapic.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/hw/i386/vapic.c b/hw/i386/vapic.c
+index 41e5ca26df..1acb9f91b2 100644
+--- a/hw/i386/vapic.c
++++ b/hw/i386/vapic.c
+@@ -716,8 +716,7 @@ static void vapic_write(void *opaque, hwaddr addr, uint64_t data,
+         break;
+     default:
+     case 4:
+-        if ((kvm_enabled() && !kvm_irqchip_in_kernel())
+-          || (whpx_enabled() && !whpx_irqchip_in_kernel())) {
++        if (!kvm_irqchip_in_kernel() && !whpx_irqchip_in_kernel()) {
+             apic_poll_irq(cpu->apic_state);
+         }
+         break;

@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Tue, 31 Mar 2026 08:32:23 +0200
+Subject: [PATCH] target/i386/tcg: fix decoding of MOVBE and CRC32 in 16-bit
+ mode
+
+Table A-4 of the SDM shows
+
+                    F0                     F1
+--------------------------------------------------------
+     NP           MOVBE Gy,My           MOVBE My,Gy
+     66           MOVBE Gw,Mw           MOVBW Mw,Gw
+     F2           CRC32 Gd,Eb           CRC32 Gd,Ey
+  66+F2           CRC32 Gd,Eb           CRC32 Gd,Ew
+
+However, this is incorrect.  Both MOVBE and (for 0xF1) CRC32
+take Gv, Ev or Mv operands.  In 16-bit mode therefore the
+operand is of 16-bit size without prefix and 32-bit mode
+with 0x66 (the data size override).
+
+For example, with NASM you get:
+
+                                 bits 16
+   67 0F 38 F0 02                movbe ax, [edx]
+   66 67 0F 38 F0 02             movbe eax, [edx]
+
+   67 F2 0F 38 F1 02             crc32 ax, word [edx]
+   66 67 F2 0F 38 F1 02          crc32 eax, dword [edx]
+
+versus
+
+                                 bits 32
+   66 0F 38 F0 02                movbe ax, [edx]
+   0F 38 F0 02                   movbe eax, [edx]
+
+   66 F2 0F 38 F1 02             crc32 eax, word [edx]
+   F2 0F 38 F1 02                crc32 eax, dword [edx]
+
+The instruction is listed correctly in the APX documentation
+as "SCALABLE" (which means it has v-size operands).
+
+Cc: qemu-stable@nongnu.org
+Reviewed-by: Richard Henderson <richard.henderson@linaro.org>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry picked from commit 76ad26dd172d27aae9f1e76d1165b497167c36c2)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ target/i386/tcg/decode-new.c.inc | 16 ++++++++++------
+ 1 file changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/target/i386/tcg/decode-new.c.inc b/target/i386/tcg/decode-new.c.inc
+index bc105aab9e..c8b5bd6ad2 100644
+--- a/target/i386/tcg/decode-new.c.inc
++++ b/target/i386/tcg/decode-new.c.inc
+@@ -875,19 +875,23 @@ static const X86OpEntry opcodes_0F38_00toEF[240] = {
+ 
+ /* five rows for no prefix, 66, F3, F2, 66+F2  */
+ static const X86OpEntry opcodes_0F38_F0toFF[16][5] = {
++    /*
++     * MOVBE and CRC32 are incorrectly listed as always doing 32-bit operation
++     * without prefix and 16-bit operation with 0x66.
++     */
+     [0] = {
+-        X86_OP_ENTRYwr(MOVBE, G,y, M,y, cpuid(MOVBE)),
+-        X86_OP_ENTRYwr(MOVBE, G,w, M,w, cpuid(MOVBE)),
++        X86_OP_ENTRYwr(MOVBE, G,v, M,v, cpuid(MOVBE)),
++        X86_OP_ENTRYwr(MOVBE, G,v, M,v, cpuid(MOVBE)),
+         {},
+         X86_OP_ENTRY2(CRC32, G,d, E,b, cpuid(SSE42)),
+         X86_OP_ENTRY2(CRC32, G,d, E,b, cpuid(SSE42)),
+     },
+     [1] = {
+-        X86_OP_ENTRYwr(MOVBE, M,y, G,y, cpuid(MOVBE)),
+-        X86_OP_ENTRYwr(MOVBE, M,w, G,w, cpuid(MOVBE)),
++        X86_OP_ENTRYwr(MOVBE, M,v, G,v, cpuid(MOVBE)),
++        X86_OP_ENTRYwr(MOVBE, M,v, G,v, cpuid(MOVBE)),
+         {},
+-        X86_OP_ENTRY2(CRC32, G,d, E,y, cpuid(SSE42)),
+-        X86_OP_ENTRY2(CRC32, G,d, E,w, cpuid(SSE42)),
++        X86_OP_ENTRY2(CRC32, G,d, E,v, cpuid(SSE42)),
++        X86_OP_ENTRY2(CRC32, G,d, E,v, cpuid(SSE42)),
+     },
+     [2] = {
+         X86_OP_ENTRY3(ANDN, G,y, B,y, E,y, vex13 cpuid(BMI1)),
