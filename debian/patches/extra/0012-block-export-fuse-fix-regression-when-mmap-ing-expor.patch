@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Fiona Ebner <f.ebner@proxmox.com>
+Date: Tue, 5 May 2026 13:04:29 +0200
+Subject: [PATCH] block/export/fuse: fix regression when mmap()-ing export with
+ MAP_SHARED
+
+The swtpm_setup binary will fail accessing a FUSE export from
+qemu-storage-daemon since commit 8599559580 ("fuse: Set direct_io and
+parallel_direct_writes"). It uses mmap() with MAP_SHARED, which fails
+fails when direct IO is used, but the FUSE_DIRECT_IO_ALLOW_MMAP flag
+is not. This is documented behavior [0]. Enable the flag if the kernel
+supports it to fix the regression.
+
+The FUSE_INIT_EXT flag needs to be set to be able to use the flags2
+argument.
+
+This patch bumps the required minimal protocol version to 7.36 for
+availablity of the FUSE_INIT_EXT flag, which is available since kernel
+5.17. A proper upstream submission should try to avoid this.
+Discussion upstream [1].
+
+[0]: https://www.kernel.org/doc/html/next/filesystems/fuse/fuse-io.html
+[1]: https://lore.kernel.org/qemu-devel/e86b82e4-a85d-46d2-bb8f-4e0f59e49a44@proxmox.com/
+
+Fixes: 8599559580 ("fuse: Set direct_io and parallel_direct_writes")
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ block/export/fuse.c | 27 ++++++++-------------------
+ 1 file changed, 8 insertions(+), 19 deletions(-)
+
+diff --git a/block/export/fuse.c b/block/export/fuse.c
+index a2a478d293..ef381fd844 100644
+--- a/block/export/fuse.c
++++ b/block/export/fuse.c
+@@ -51,23 +51,11 @@
+ #define FUSE_MAX_READ_BYTES (MIN(BDRV_REQUEST_MAX_BYTES, 1 * 1024 * 1024))
+ #define FUSE_MAX_WRITE_BYTES (64 * 1024)
+ 
+-/*
+- * fuse_init_in structure before 7.36.  We don't need the flags2 field added
+- * there, so we can work with the smaller older structure to stay compatible
+- * with older kernels.
+- */
+-struct fuse_init_in_compat {
+-    uint32_t major;
+-    uint32_t minor;
+-    uint32_t max_readahead;
+-    uint32_t flags;
+-};
+-
+ typedef struct FuseRequestInHeader {
+     struct fuse_in_header common;
+     /* All supported requests */
+     union {
+-        struct fuse_init_in_compat init;
++        struct fuse_init_in init;
+         struct fuse_open_in open;
+         struct fuse_setattr_in setattr;
+         struct fuse_read_in read;
+@@ -826,9 +814,10 @@ static bool is_regular_file(const char *path, Error **errp)
+  */
+ static ssize_t coroutine_fn GRAPH_RDLOCK
+ fuse_co_init(FuseExport *exp, struct fuse_init_out *out,
+-             const struct fuse_init_in_compat *in)
++             const struct fuse_init_in *in)
+ {
+-    const uint32_t supported_flags = FUSE_ASYNC_READ | FUSE_ASYNC_DIO;
++    const uint32_t supported_flags = FUSE_ASYNC_READ | FUSE_ASYNC_DIO | FUSE_INIT_EXT;
++    const uint32_t supported_flags2 = (FUSE_DIRECT_IO_ALLOW_MMAP >> 32);
+ 
+     if (in->major != 7) {
+         error_report("FUSE major version mismatch: We have 7, but kernel has %"
+@@ -836,9 +825,9 @@ fuse_co_init(FuseExport *exp, struct fuse_init_out *out,
+         return -EINVAL;
+     }
+ 
+-    /* 2007's 7.9 added fuse_attr.blksize; working around that would be hard */
+-    if (in->minor < 9) {
+-        error_report("FUSE minor version too old: 9 required, but kernel has %"
++    /* Kernel 5.17's 7.36 protocol version added FUSE_INIT_EXT */
++    if (in->minor < 36) {
++        error_report("FUSE minor version too old: 36 required, but kernel has %"
+                      PRIu32, in->minor);
+         return -EINVAL;
+     }
+@@ -849,7 +838,7 @@ fuse_co_init(FuseExport *exp, struct fuse_init_out *out,
+         .max_readahead = in->max_readahead,
+         .max_write = FUSE_MAX_WRITE_BYTES,
+         .flags = in->flags & supported_flags,
+-        .flags2 = 0,
++        .flags2 = in->flags2 & supported_flags2,
+ 
+         /* libfuse maximum: 2^16 - 1 */
+         .max_background = UINT16_MAX,
