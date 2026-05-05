@@ -1,3 +1,19 @@
+pve-qemu-kvm (11.0.0-1) trixie; urgency=medium
+
+  * update submodule and patches to QEMU 11.0.0.
+
+  * drop legacy QEMU machine version 4.0, which is below the oldest still
+    supported machine version 6.0 for Proxmox VE 9.
+
+  * update supported CPU models for amd64/x86_64 adding Intel DiamondRapids
+    and providing new versions for some existing Intel based models.
+
+  * cherry-pick stable fixes for QEMU 11.0.0.
+
+  * add fix for regression when using fuse export for swtpm.
+
+ -- Proxmox Support Team <support@proxmox.com>  Tue, 05 May 2026 17:06:01 +0200
+
 pve-qemu-kvm (10.2.1-2) trixie; urgency=medium
 
   * build system: make: properly use DEB_HOST_ARCH variable instead of
