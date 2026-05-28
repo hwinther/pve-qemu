@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: GuoHan Zhao <zhaoguohan@kylinos.cn>
+Date: Fri, 22 May 2026 16:13:05 +0800
+Subject: [PATCH] vfio-user: reject zero DMA page size capability
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+check_pgsizes() validates that no page-size bits smaller than
+VFIO_USER_DEF_PGSIZE are set, but it still accepts pgsizes=0. This lets a
+malformed server overwrite the default page-size mask with zero.
+
+Later vfio_user_setup() asserts that proxy->dma_pgsizes is non-zero, so device
+realization aborts instead of reporting a version capability error. Reject a
+zero DMA page-size mask during version capability parsing.
+
+Fixes: 36227628d824 (vfio-user: implement message send infrastructure)
+Signed-off-by: GuoHan Zhao <zhaoguohan@kylinos.cn>
+Reviewed-by: John Levon <john.levon@nutanix.com>
+Link: https://lore.kernel.org/qemu-devel/20260522081306.4186242-1-zhaoguohan@kylinos.cn
+Signed-off-by: Cédric Le Goater <clg@redhat.com>
+(cherry picked from commit ab89d02dac6f0f53e35a689f01099602aa2de816)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/vfio-user/proxy.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/hw/vfio-user/proxy.c b/hw/vfio-user/proxy.c
+index 314dfd23d8..3fe5b0138b 100644
+--- a/hw/vfio-user/proxy.c
++++ b/hw/vfio-user/proxy.c
+@@ -1155,9 +1155,11 @@ static bool check_pgsizes(VFIOUserProxy *proxy, QObject *qobj, Error **errp)
+         return false;
+     }
+ 
+-    /* must be larger than default */
+-    if (pgsizes & (VFIO_USER_DEF_PGSIZE - 1)) {
+-        error_setg(errp, "pgsize 0x%"PRIx64" too small", pgsizes);
++    /* must not be zero or smaller than default */
++    if (pgsizes < VFIO_USER_DEF_PGSIZE ||
++        (pgsizes & (VFIO_USER_DEF_PGSIZE - 1))) {
++        error_setg(errp, "%s 0x%"PRIx64" too small",
++                   VFIO_USER_CAP_PGSIZES, pgsizes);
+         return false;
+     }
+ 

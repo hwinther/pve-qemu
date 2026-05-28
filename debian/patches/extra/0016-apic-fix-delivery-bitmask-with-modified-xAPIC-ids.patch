@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 15 May 2026 12:10:22 +0200
+Subject: [PATCH] apic: fix delivery bitmask with modified xAPIC ids
+
+Self-IPIs (or all-but-self IPIs) in QEMU can cause a out-of-bounds access
+to deliver_bitmask, because the access uses the APIC ID register which
+is writable by the guest.  However, foreach_apic uses the delivery
+bitmask indexes to look up the local_apics[] array, which is indexed
+by *initial* APIC id.  Using the right id fixes both a possible heap
+write overflow if the modified APIC id is too large for max_apic_words,
+and a mis-delivery of both self and all-but-self IPIs.
+
+Reported-by: Wei Che Kao <skps96g313.cs10@gmail.com>
+Cc: qemu-stable@nongnu.org
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry picked from commit 153dc2fa7bbe0491290d22c4bbb6807074f24260)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/intc/apic.c | 17 ++++++++---------
+ 1 file changed, 8 insertions(+), 9 deletions(-)
+
+diff --git a/hw/intc/apic.c b/hw/intc/apic.c
+index 8766ed00b9..ced7df49bd 100644
+--- a/hw/intc/apic.c
++++ b/hw/intc/apic.c
+@@ -648,13 +648,6 @@ static void apic_deliver(APICCommonState *s, uint32_t dest, uint8_t dest_mode,
+     APICCommonState *apic_iter;
+     uint32_t deliver_bitmask_size = max_apic_words * sizeof(uint32_t);
+     g_autofree uint32_t *deliver_bitmask = g_new(uint32_t, max_apic_words);
+-    uint32_t current_apic_id;
+-
+-    if (is_x2apic_mode(s)) {
+-        current_apic_id = s->initial_apic_id;
+-    } else {
+-        current_apic_id = s->id;
+-    }
+ 
+     switch (dest_shorthand) {
+     case 0:
+@@ -662,14 +655,20 @@ static void apic_deliver(APICCommonState *s, uint32_t dest, uint8_t dest_mode,
+         break;
+     case 1:
+         memset(deliver_bitmask, 0x00, deliver_bitmask_size);
+-        apic_set_bit(deliver_bitmask, current_apic_id);
++        /*
++         * The self and all-but-self cases do not use apic_match_dest() and
++         * directly fill in deliver_bitmask; the bitmask's indexes in turn
++         * map to local_apics[] slots which are never changed even if the
++         * xAPIC id is modified.  So use s->initial_apic_id instead of s->id.
++         */
++        apic_set_bit(deliver_bitmask, s->initial_apic_id);
+         break;
+     case 2:
+         memset(deliver_bitmask, 0xff, deliver_bitmask_size);
+         break;
+     case 3:
+         memset(deliver_bitmask, 0xff, deliver_bitmask_size);
+-        apic_reset_bit(deliver_bitmask, current_apic_id);
++        apic_reset_bit(deliver_bitmask, s->initial_apic_id);
+         break;
+     }
+ 

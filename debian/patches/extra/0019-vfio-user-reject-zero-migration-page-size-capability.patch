@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: GuoHan Zhao <zhaoguohan@kylinos.cn>
+Date: Fri, 22 May 2026 16:13:06 +0800
+Subject: [PATCH] vfio-user: reject zero migration page size capability
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+check_migr_pgsize() validates that no page-size bits smaller than
+VFIO_USER_DEF_PGSIZE are set, but it still accepts pgsize=0. This can replace
+the default migration page size with an unusable value.
+
+Reject a zero migration page size during version capability parsing, matching
+the lower-bound check used for the DMA page-size capability.
+
+Fixes: 36227628d824 (vfio-user: implement message send infrastructure)
+Signed-off-by: GuoHan Zhao <zhaoguohan@kylinos.cn>
+Link: https://lore.kernel.org/qemu-devel/20260522081306.4186242-2-zhaoguohan@kylinos.cn
+Signed-off-by: Cédric Le Goater <clg@redhat.com>
+(cherry picked from commit 497b5c5b05ac2be00ae16c723e2445ebbc486cb2)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/vfio-user/proxy.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/hw/vfio-user/proxy.c b/hw/vfio-user/proxy.c
+index 3fe5b0138b..3167d27b03 100644
+--- a/hw/vfio-user/proxy.c
++++ b/hw/vfio-user/proxy.c
+@@ -1081,9 +1081,11 @@ static bool check_migr_pgsize(VFIOUserProxy *proxy, QObject *qobj, Error **errp)
+         return false;
+     }
+ 
+-    /* must be larger than default */
+-    if (pgsize & (VFIO_USER_DEF_PGSIZE - 1)) {
+-        error_setg(errp, "pgsize 0x%"PRIx64" too small", pgsize);
++    /* must not be zero or smaller than default */
++    if (pgsize < VFIO_USER_DEF_PGSIZE ||
++        (pgsize & (VFIO_USER_DEF_PGSIZE - 1))) {
++        error_setg(errp, "%s 0x%"PRIx64" too small",
++                   VFIO_USER_CAP_PGSIZE, pgsize);
+         return false;
+     }
+ 
