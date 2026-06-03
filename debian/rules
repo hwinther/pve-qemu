@@ -124,6 +124,10 @@ install: build
 
 	# CPU flags are static for QEMU version, allows avoiding more costly checks
 	./debian/parse-cpu-flags.pl $(destdir)/usr/bin/qemu-system-x86_64 max-x86_64-cpu > $(flagfile)
+	# NOTE: If the diff fails here after upgrading the QEMU submodule, check which new flags
+	# are to be picked up and which are to be excluded, adapt to other changes and commit the
+	# new expected file (and parse-cpu-flags.pl script if that changed as well).
+	diff -u $(flagfile) ./debian/recognized-CPUID-flags-x86_64
 
 	# Supported machine versions are static for a given QEMU binary.
 	$(destdir)/usr/bin/qemu-system-x86_64 -machine help | ./debian/parse-machines.pl > $(machine_file_x86_64)
