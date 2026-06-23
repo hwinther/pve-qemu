@@ -72,14 +72,17 @@ endif
 	    --enable-linux-io-uring \
 	    --enable-numa \
 	    --enable-opengl \
+	    --enable-pa \
 	    --enable-png \
 	    --enable-rbd \
 	    --enable-seccomp \
 	    --enable-slirp \
+	    --enable-sndio \
 	    --enable-spice \
 	    --enable-usb-redir \
 	    --enable-virglrenderer \
 	    --enable-virtfs \
+	    --enable-xkbcommon \
 	    --enable-zstd
 
 build: build-arch build-indep
