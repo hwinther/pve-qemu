@@ -275,7 +275,7 @@ index f747bc3cb2..7aa0ed1b5a 100644
  # libselinux
  selinux = dependency('libselinux',
 diff --git a/monitor/hmp-cmds.c b/monitor/hmp-cmds.c
-index cbedf13103..33c1c81b3c 100644
+index e7afe15e97..ce374de2ec 100644
 --- a/monitor/hmp-cmds.c
 +++ b/monitor/hmp-cmds.c
 @@ -25,6 +25,7 @@

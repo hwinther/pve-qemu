@@ -34,6 +34,7 @@ Signed-off-by: Stefan Reiter <s.reiter@proxmox.com>
      improve setting state in savevm-end handler
      improve runstate preservation
      use dedicated iothread for state file to avoid deadlock, bug #6262
+     add parameter to skip vm start to be used for hibernation
      rebase for 11.0.0]
 Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
 ---
@@ -42,13 +43,13 @@ Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
  include/migration/snapshot.h |   2 +
  include/monitor/hmp.h        |   3 +
  migration/meson.build        |   1 +
- migration/savevm-async.c     | 586 +++++++++++++++++++++++++++++++++++
+ migration/savevm-async.c     | 597 +++++++++++++++++++++++++++++++++++
  monitor/hmp-cmds.c           |  38 +++
  qapi/migration.json          |  34 ++
- qapi/misc.json               |  18 ++
+ qapi/misc.json               |  25 ++
  qemu-options.hx              |  12 +
  system/vl.c                  |  10 +
- 11 files changed, 734 insertions(+)
+ 11 files changed, 752 insertions(+)
  create mode 100644 migration/savevm-async.c
 
 diff --git a/hmp-commands-info.hx b/hmp-commands-info.hx
@@ -146,10 +147,10 @@ index 0222d5ea6e..90d62d5723 100644
  ), gnutls, zlib)
 diff --git a/migration/savevm-async.c b/migration/savevm-async.c
 new file mode 100644
-index 0000000000..d973d8300c
+index 0000000000..2a860f11a1
 --- /dev/null
 +++ b/migration/savevm-async.c
-@@ -0,0 +1,586 @@
+@@ -0,0 +1,597 @@
 +#include "qemu/osdep.h"
 +#include "migration/channel-savevm-async.h"
 +#include "migration/migration.h"
@@ -204,7 +205,8 @@ index 0000000000..d973d8300c
 +    int state;
 +    Error *error;
 +    Error *blocker;
-+    int vm_needs_start;
++    bool vm_needs_start;
++    bool skip_vm_start;
 +    QEMUFile *file;
 +    int64_t total_time;
 +    QEMUBH *finalize_bh;
@@ -217,6 +219,10 @@ index 0000000000..d973d8300c
 +{
 +    return snap_state.state == SAVE_STATE_CANCELLED ||
 +        snap_state.state == SAVE_STATE_ERROR;
++}
++
++static bool should_skip_vm_start(void) {
++    return snap_state.state == SAVE_STATE_COMPLETED && snap_state.skip_vm_start;
 +}
 +
 +SaveVMInfo *qmp_query_savevm(Error **errp)
@@ -380,7 +386,9 @@ index 0000000000..d973d8300c
 +                            snap_state.state);
 +    }
 +    if (snap_state.vm_needs_start) {
-+        vm_start();
++        if (!should_skip_vm_start()) {
++            vm_start();
++        }
 +        snap_state.vm_needs_start = false;
 +    }
 +
@@ -490,7 +498,8 @@ index 0000000000..d973d8300c
 +    }
 +}
 +
-+void qmp_savevm_start(const char *statefile, Error **errp)
++void qmp_savevm_start(const char *statefile, bool has_skip_vm_start,
++                      bool skip_vm_start, Error **errp)
 +{
 +    Error *local_err = NULL;
 +    MigrationState *ms = migrate_get_current();
@@ -514,6 +523,7 @@ index 0000000000..d973d8300c
 +    snap_state.total_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
 +    snap_state.blocker = NULL;
 +    snap_state.target_close_wait = (QemuCoSleep){ .to_wake = NULL };
++    snap_state.skip_vm_start = has_skip_vm_start && skip_vm_start;
 +
 +    if (snap_state.error) {
 +        error_free(snap_state.error);
@@ -657,7 +667,9 @@ index 0000000000..d973d8300c
 +    }
 +
 +    if (snap_state.vm_needs_start) {
-+        vm_start();
++        if (!should_skip_vm_start()) {
++            vm_start();
++        }
 +        snap_state.vm_needs_start = false;
 +    }
 +
@@ -737,7 +749,7 @@ index 0000000000..d973d8300c
 +    return ret;
 +}
 diff --git a/monitor/hmp-cmds.c b/monitor/hmp-cmds.c
-index bc26b39d70..cbedf13103 100644
+index bc26b39d70..e7afe15e97 100644
 --- a/monitor/hmp-cmds.c
 +++ b/monitor/hmp-cmds.c
 @@ -27,6 +27,7 @@
@@ -757,7 +769,7 @@ index bc26b39d70..cbedf13103 100644
 +    Error *errp = NULL;
 +    const char *statefile = qdict_get_try_str(qdict, "statefile");
 +
-+    qmp_savevm_start(statefile, &errp);
++    qmp_savevm_start(statefile, false, false, &errp);
 +    hmp_handle_error(mon, errp);
 +}
 +
@@ -838,22 +850,29 @@ index 7134d4ce47..8dc8d52b23 100644
  # @query-migrate:
  #
 diff --git a/qapi/misc.json b/qapi/misc.json
-index 28c641fe2f..5d2f12259a 100644
+index 28c641fe2f..cfa10c849b 100644
 --- a/qapi/misc.json
 +++ b/qapi/misc.json
-@@ -449,6 +449,24 @@
+@@ -449,6 +449,31 @@
  ##
  { 'command': 'query-fdsets', 'returns': ['FdsetInfo'] }
  
 +##
 +# @savevm-start:
 +#
-+# Prepare for snapshot and halt VM.  Save VM state to statefile.
++# Prepare for snapshot and halt VM.  Save VM state to statefile.  When
++# a @statefile is used, then the VM is only halted before completion.
++# Use @query-savevm to check the state of the operation.
 +#
 +# @statefile: target file that state should be written to.
 +#
++# @skip-vm-start: Do not resume the VM after the snapshot is done
++#                 successfully, even if the VM was running before
++#                 snapshot completion.  Useful for hibernation.
++#
 +##
-+{ 'command': 'savevm-start', 'data': { '*statefile': 'str' } }
++{ 'command': 'savevm-start', 'data': { '*statefile': 'str',
++                                       '*skip-vm-start': 'bool' } }
 +
 +##
 +# @savevm-end:
