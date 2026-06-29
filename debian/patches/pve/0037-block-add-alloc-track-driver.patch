@@ -449,7 +449,7 @@ index d023753091..a777c8079c 100644
  
  out:
 diff --git a/qapi/block-core.json b/qapi/block-core.json
-index 4a6769c053..8af4107bf5 100644
+index b314192e30..a8a7d227a8 100644
 --- a/qapi/block-core.json
 +++ b/qapi/block-core.json
 @@ -3611,7 +3611,8 @@
@@ -484,7 +484,7 @@ index 4a6769c053..8af4107bf5 100644
  ##
  # @BlockdevOptionsPbs:
  #
-@@ -5155,6 +5171,7 @@
+@@ -5159,6 +5175,7 @@
              '*detect-zeroes': 'BlockdevDetectZeroesOptions' },
    'discriminator': 'driver',
    'data': {

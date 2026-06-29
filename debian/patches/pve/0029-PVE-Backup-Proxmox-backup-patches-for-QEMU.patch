@@ -263,10 +263,10 @@ index abebfea0e2..bc727a3a6a 100644
  void hmp_device_add(Monitor *mon, const QDict *qdict);
  void hmp_device_del(Monitor *mon, const QDict *qdict);
 diff --git a/meson.build b/meson.build
-index f747bc3cb2..7aa0ed1b5a 100644
+index a88b007017..684501a185 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -2150,6 +2150,7 @@ endif
+@@ -2156,6 +2156,7 @@ endif
  has_gettid = cc.has_function('gettid')
  
  libuuid = cc.find_library('uuid', required: true)
@@ -1685,7 +1685,7 @@ index 0000000000..177fb851b4
 +    return ret;
 +}
 diff --git a/qapi/block-core.json b/qapi/block-core.json
-index 0c00aabbab..4f407007b9 100644
+index d5a2bbcff1..7f1daf42fe 100644
 --- a/qapi/block-core.json
 +++ b/qapi/block-core.json
 @@ -952,6 +952,248 @@

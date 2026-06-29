@@ -89,7 +89,7 @@ index 80b75ad5cb..f8417347a1 100644
   * @migrate_add_blocker - prevent all modes of migration from proceeding
   *
 diff --git a/migration/migration.c b/migration/migration.c
-index 23b05a64cf..8acd9610de 100644
+index f415448689..979fc7050e 100644
 --- a/migration/migration.c
 +++ b/migration/migration.c
 @@ -1886,6 +1886,30 @@ bool migration_is_blocked(Error **errp)

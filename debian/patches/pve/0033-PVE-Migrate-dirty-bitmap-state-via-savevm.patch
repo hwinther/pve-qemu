@@ -58,7 +58,7 @@ index 90d62d5723..6010ccaef0 100644
    'ram.c',
    'savevm.c',
 diff --git a/migration/migration.c b/migration/migration.c
-index 5c9aaa6e58..23b05a64cf 100644
+index dfc60372cf..f415448689 100644
 --- a/migration/migration.c
 +++ b/migration/migration.c
 @@ -329,6 +329,7 @@ void migration_object_init(void)
@@ -192,7 +192,7 @@ index 177fb851b4..7575abab7c 100644
      ret->pbs_masterkey = true;
      ret->backup_max_workers = true;
 diff --git a/qapi/block-core.json b/qapi/block-core.json
-index 84a4572625..4a6769c053 100644
+index e1c659310d..b314192e30 100644
 --- a/qapi/block-core.json
 +++ b/qapi/block-core.json
 @@ -1112,6 +1112,11 @@

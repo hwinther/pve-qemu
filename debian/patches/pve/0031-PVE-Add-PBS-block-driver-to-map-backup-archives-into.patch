@@ -348,10 +348,10 @@ index 0000000000..3e41421716
 +
 +block_init(bdrv_pbs_init);
 diff --git a/meson.build b/meson.build
-index 3a57c44ade..eb84d64604 100644
+index 7111b47319..4115c35884 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -4997,7 +4997,7 @@ summary_info += {'Query Processing Library support': qpl}
+@@ -5003,7 +5003,7 @@ summary_info += {'Query Processing Library support': qpl}
  summary_info += {'UADK Library support': uadk}
  summary_info += {'qatzip support':    qatzip}
  summary_info += {'NUMA host support': numa}
@@ -361,7 +361,7 @@ index 3a57c44ade..eb84d64604 100644
  summary_info += {'libdaxctl support': libdaxctl}
  summary_info += {'libcbor support':   libcbor}
 diff --git a/qapi/block-core.json b/qapi/block-core.json
-index 4f407007b9..84a4572625 100644
+index 7f1daf42fe..e1c659310d 100644
 --- a/qapi/block-core.json
 +++ b/qapi/block-core.json
 @@ -3619,6 +3619,7 @@
@@ -406,7 +406,7 @@ index 4f407007b9..84a4572625 100644
  ##
  # @BlockdevOptionsNVMe:
  #
-@@ -5149,6 +5177,7 @@
+@@ -5153,6 +5181,7 @@
        'nfs':        'BlockdevOptionsNfs',
        'null-aio':   'BlockdevOptionsNull',
        'null-co':    'BlockdevOptionsNull',

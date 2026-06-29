@@ -247,7 +247,7 @@ index 0000000000..036edb17f5
 +
 +block_init(bdrv_zeroinit_init);
 diff --git a/qapi/block-core.json b/qapi/block-core.json
-index 496118bdc7..f0f225a3c2 100644
+index 50a0af3569..4e8bc65bdb 100644
 --- a/qapi/block-core.json
 +++ b/qapi/block-core.json
 @@ -3381,7 +3381,7 @@
@@ -259,7 +259,7 @@ index 496118bdc7..f0f225a3c2 100644
  
  ##
  # @BlockdevOptionsFile:
-@@ -4936,7 +4936,8 @@
+@@ -4940,7 +4940,8 @@
                        'if': 'CONFIG_BLKIO' },
        'vmdk':       'BlockdevOptionsGenericCOWFormat',
        'vpc':        'BlockdevOptionsGenericFormat',

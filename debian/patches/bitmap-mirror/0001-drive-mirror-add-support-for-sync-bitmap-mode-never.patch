@@ -38,7 +38,7 @@ Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
  5 files changed, 135 insertions(+), 21 deletions(-)
 
 diff --git a/block/mirror.c b/block/mirror.c
-index 2fcded9e93..f34b5fe733 100644
+index 089856f4a8..e6f645e0f2 100644
 --- a/block/mirror.c
 +++ b/block/mirror.c
 @@ -74,6 +74,8 @@ typedef struct MirrorBlockJob {
@@ -333,7 +333,7 @@ index e7c8f1a856..d5aa68caeb 100644
                    BlockdevOnError on_source_error,
                    BlockdevOnError on_target_error,
 diff --git a/qapi/block-core.json b/qapi/block-core.json
-index 508b081ac1..496118bdc7 100644
+index 0efd51787b..50a0af3569 100644
 --- a/qapi/block-core.json
 +++ b/qapi/block-core.json
 @@ -2280,6 +2280,15 @@
@@ -390,7 +390,7 @@ index 508b081ac1..496118bdc7 100644
              '*buf-size': 'int', '*on-source-error': 'BlockdevOnError',
              '*on-target-error': 'BlockdevOnError',
 diff --git a/tests/unit/test-block-iothread.c b/tests/unit/test-block-iothread.c
-index e26b3be593..396a53a757 100644
+index 5273ff235a..7055d32686 100644
 --- a/tests/unit/test-block-iothread.c
 +++ b/tests/unit/test-block-iothread.c
 @@ -755,8 +755,8 @@ static void test_propagate_mirror(void)
