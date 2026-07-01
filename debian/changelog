@@ -1,3 +1,29 @@
+pve-qemu-kvm (11.0.2-1) trixie; urgency=medium
+
+  * update submodule and patches to QEMU 11.0.2, which brings minor fixes for
+    x86 and ARM emulation, migration, rare block-layer edge cases and VNC
+    memory handling. The downstream stop-gap patch for the trim/drain deadlock
+    with IDE/SATA drives could be dropped, as an equivalent fix landed
+    upstream.
+
+  * fix #7722: restore PNG support, which is required for the screendump
+    feature and advertised by VNC when available. It regressed because the
+    build dependency providing PNG support was previously only pulled in
+    implicitly.
+
+  * accept newer VMware seSparse snapshot deltas that set a reserved header
+    field which stock QEMU rejects. This unblocks the ESXi live-import from
+    reading a running VM's disk over the NBD transport.
+
+  * async snapshot: allow skipping the VM start after a successful snapshot,
+    so that a hibernation snapshot can leave the guest stopped for the
+    management layer to shut it down without further guest activity.
+
+  * recognize Hyper-V enlightenments in the list of supported CPUID flags,
+    making them available for use in custom CPU models.
+
+ -- Proxmox Support Team <support@proxmox.com>  Wed, 01 Jul 2026 18:35:21 +0200
+
 pve-qemu-kvm (11.0.0-4) trixie; urgency=medium
 
   * backport stable fixes for QEMU 11.0 to improve stability with vfio, apic,
