@@ -1,0 +1,184 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Thomas Lamprecht <t.lamprecht@proxmox.com>
+Date: Sun, 28 Jun 2026 09:17:12 +0200
+Subject: [PATCH] block/vmdk: tolerate known seSparse reserved1 bit
+
+VMware seSparse snapshot deltas from newer products (seen with
+vSphere 8) set the const-header field this driver calls reserved1 to
+0x200; older versions left it zero. The driver requires every reserved
+field to be zero, so it rejects these images with "Unsupported
+reserved bits" and cannot read a running VM's snapshot delta during
+an ESXi live import.
+
+The seSparse format is undocumented and qemu's reader for it was
+reverse-engineered in 98eb9733f4 ("vmdk: Add read-only support for
+seSparse snapshots"); reserved1 was named that only because it was
+zero in every image seen at the time, so reading meaning into it now
+is nothing new. The driver never uses reserved1, which takes part in
+no offset or size computation; the version, grain size, grain table
+size and flags checked just above still gate the format.
+
+Its value 0x200 is the size of the const header in bytes, and it
+stayed 0x200 on test disks from 64 GiB to 8 TiB, so it does not
+depend on the disk and looks like a fixed header-size or
+layout-version marker.
+Accept that one value and keep rejecting any other reserved1 bit, or a
+non-zero reserved2 to reserved4, so a genuinely different layout is
+still refused instead of misread.
+
+A new iotest builds a minimal seSparse image and checks that the known
+reserved1 value opens read-only and reads back as zeros, while an
+unknown reserved1 bit or a set reserved2 is still refused.
+
+Signed-off-by: Thomas Lamprecht <t.lamprecht@proxmox.com>
+---
+ block/vmdk.c                                 |   3 +-
+ .../tests/vmdk-sesparse-reserved             | 105 +++++++++++++++++
+ .../tests/vmdk-sesparse-reserved.out         |  14 +++
+ 3 files changed, 121 insertions(+), 1 deletion(-)
+
+diff --git a/block/vmdk.c b/block/vmdk.c
+index cd8b4ec7c8..7f8fdf0727 100644
+--- a/block/vmdk.c
++++ b/block/vmdk.c
+@@ -768,7 +768,8 @@ static int check_se_sparse_const_header(VMDKSESparseConstHeader *header,
+         return -ENOTSUP;
+     }
+ 
+-    if (header->reserved1 != 0 || header->reserved2 != 0 ||
++    /* vSphere 8 sets reserved1 to 0x200, the 512-byte const header size. */
++    if ((header->reserved1 & ~UINT64_C(0x200)) != 0 || header->reserved2 != 0 ||
+         header->reserved3 != 0 || header->reserved4 != 0) {
+         error_setg(errp, "Unsupported reserved bits:"
+                    " 0x%016" PRIx64 " 0x%016" PRIx64
+diff --git a/tests/qemu-iotests/tests/vmdk-sesparse-reserved b/tests/qemu-iotests/tests/vmdk-sesparse-reserved
+new file mode 100755
+index 0000000000..a848d2fcb0
+--- /dev/null
++++ b/tests/qemu-iotests/tests/vmdk-sesparse-reserved
+@@ -0,0 +1,105 @@
++#!/usr/bin/env bash
++# group: rw quick
++#
++# Test that qemu's read-only VMware seSparse support tolerates the reserved1
++# const-header bit that newer VMware products (observed with vSphere 8) set,
++# while still rejecting any other reserved bit.
++#
++# Copyright (C) 2026 Proxmox Server Solutions GmbH
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/>.
++#
++
++# creator
++owner=support@proxmox.com
++
++seq=`basename $0`
++echo "QA output created by $seq"
++
++status=1	# failure is the default!
++
++_cleanup()
++{
++    _cleanup_test_img
++    rm -f "$TEST_IMG-sesparse.vmdk"
++}
++trap "_cleanup; exit \$status" 0 1 2 3 15
++
++# get standard environment, filters and checks
++cd ..
++. ./common.rc
++. ./common.filter
++
++_supported_fmt vmdk
++_supported_proto file
++_supported_os Linux
++
++# qemu-img cannot create seSparse images, so synthesize a minimal, all
++# unallocated one (descriptor plus extent). The grain directory is all zero,
++# so every read returns zeros without touching grain tables or grains; only
++# the const header, volatile header and grain directory need to be present.
++# Args: <descriptor-path> <reserved1> <reserved2>
++make_sesparse()
++{
++    python3 - "$@" <<'EOF'
++import struct, sys
++out, r1, r2 = sys.argv[1], int(sys.argv[2], 0), int(sys.argv[3], 0)
++SECTOR, CAP, GRAIN, GT = 512, 32768, 8, 64
++const = [
++    0x00000000cafebabe, 0x0000000200000001, CAP, GRAIN, GT, 0,
++    r1, r2, 0, 0,
++    1, 1, 2, 1, 3, 1, 4, 1, 5, GT, 69, 1, 70, 1, 71, CAP,
++]
++hdr = b"".join(struct.pack("<Q", v) for v in const)
++hdr += bytes(SECTOR - len(hdr))
++vol = struct.pack("<QQQQ", 0x00000000cafecafe, 0, 0, 0)
++vol += bytes(SECTOR - len(vol))
++img = bytearray(5 * SECTOR)
++img[0:SECTOR] = hdr
++img[SECTOR:2 * SECTOR] = vol
++extent = out + "-sesparse.vmdk"
++with open(extent, "wb") as f:
++    f.write(img)
++with open(out, "w") as f:
++    f.write(
++        '# Disk DescriptorFile\nversion=3\nencoding="UTF-8"\n'
++        'CID=fffffffe\nparentCID=ffffffff\ncreateType="seSparse"\n\n'
++        '# Extent description\n'
++        'RW %d SESPARSE "%s"\n\n'
++        '# The Disk Data Base\n#DDB\nddb.grain = "8"\n'
++        % (CAP, extent.split("/")[-1])
++    )
++EOF
++}
++
++echo
++echo "=== the 0x200 reserved1 bit set by newer VMware is accepted as zeros ==="
++make_sesparse "$TEST_IMG" 0x200 0
++$QEMU_IMG info -f vmdk "$TEST_IMG" | _filter_testdir | \
++    grep -e "file format" -e "create type"
++$QEMU_IO -r -f vmdk -c "read -P 0 0 64k" "$TEST_IMG" | _filter_qemu_io
++
++echo
++echo "=== any other reserved1 bit is still rejected ==="
++make_sesparse "$TEST_IMG" 0x400 0
++$QEMU_IMG info -f vmdk "$TEST_IMG" 2>&1 | _filter_testdir
++
++echo
++echo "=== a non-zero reserved2 is still rejected ==="
++make_sesparse "$TEST_IMG" 0 0x1
++$QEMU_IMG info -f vmdk "$TEST_IMG" 2>&1 | _filter_testdir
++
++# success, all done
++echo "*** done"
++status=0
+diff --git a/tests/qemu-iotests/tests/vmdk-sesparse-reserved.out b/tests/qemu-iotests/tests/vmdk-sesparse-reserved.out
+new file mode 100644
+index 0000000000..5a3fa584b9
+--- /dev/null
++++ b/tests/qemu-iotests/tests/vmdk-sesparse-reserved.out
+@@ -0,0 +1,14 @@
++QA output created by vmdk-sesparse-reserved
++
++=== the 0x200 reserved1 bit set by newer VMware is accepted as zeros ===
++file format: vmdk
++    create type: seSparse
++read 65536/65536 bytes at offset 0
++64 KiB, X ops; XX:XX:XX.X (XXX YYY/sec and XXX ops/sec)
++
++=== any other reserved1 bit is still rejected ===
++qemu-img: Could not open 'TEST_DIR/t.vmdk': Unsupported reserved bits: 0x0000000000000400 0x0000000000000000 0x0000000000000000 0x0000000000000000
++
++=== a non-zero reserved2 is still rejected ===
++qemu-img: Could not open 'TEST_DIR/t.vmdk': Unsupported reserved bits: 0x0000000000000000 0x0000000000000001 0x0000000000000000 0x0000000000000000
++*** done
