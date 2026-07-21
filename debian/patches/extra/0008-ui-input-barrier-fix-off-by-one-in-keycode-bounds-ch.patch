@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Mon, 6 Jul 2026 12:35:38 +0400
+Subject: [PATCH] ui/input-barrier: fix off-by-one in keycode bounds check
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Use strict "<" to fix the off-by-one.
+
+Fixes: 6105683da35b ("ui: add an embedded Barrier client")
+Resolves: https://gitlab.com/qemu-project/qemu/-/issues/3951
+Reported-by: huntr bubble
+Reviewed-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+Reviewed-by: Laurent Vivier <lvivier@redhat.com>
+Signed-off-by: Marc-Andre Lureau <marcandre.lureau@redhat.com>
+(cherry picked from commit 82b4d693d522d406c950067caa4f14f45f4b679e)
+[FE: backport]
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ ui/input-barrier.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ui/input-barrier.c b/ui/input-barrier.c
+index 0a2198ca50..d4b3079261 100644
+--- a/ui/input-barrier.c
++++ b/ui/input-barrier.c
+@@ -87,7 +87,7 @@ static kbd_layout_t *kbd_layout;
+ static int input_barrier_to_qcode(uint16_t keyid, uint16_t keycode)
+ {
+     /* keycode is optional, if it is not provided use keyid */
+-    if (keycode && keycode <= qemu_input_map_xorgkbd_to_qcode_len) {
++    if (keycode && keycode < qemu_input_map_xorgkbd_to_qcode_len) {
+         return qemu_input_map_xorgkbd_to_qcode[keycode];
+     }
+ 

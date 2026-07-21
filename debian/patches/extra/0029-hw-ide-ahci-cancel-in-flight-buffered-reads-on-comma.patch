@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Denis V. Lunev" <den@openvz.org>
+Date: Fri, 19 Jun 2026 13:21:49 +0200
+Subject: [PATCH] hw/ide/ahci: cancel in-flight buffered reads on command
+ engine restart
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+ATAPI CD reads are issued through ide_buffered_readv()
+(cd_read_sector() and ide_atapi_cmd_read_dma_cb() in hw/ide/atapi.c).
+The PIO path discards the returned aiocb; the DMA path stores it in
+s->bus->dma->aiocb.
+
+A guest can stop and restart a port's command engine
+(PxCMD.ST 1 -> 0 -> 1) while such a read is still in flight. Stopping
+the engine unmaps the command list (ahci_unmap_clb_address()) and
+restarting it re-maps the list and clears AHCIDevice.cur_cmd to NULL,
+but nothing tears down the outstanding read. This path does not run
+ide_reset(), so the drive's transfer state is preserved and the read
+still completes. Its callbacks then dereference the stale or NULL
+cur_cmd in the AHCI transfer helpers:
+
+  PIO: cd_read_sector_cb() -> ide_atapi_cmd_reply_end() ->
+       ide_transfer_start_norecurse() -> ahci_pio_transfer()
+
+  DMA: ide_atapi_cmd_read_dma_cb() -> ahci_dma_rw_buf() ->
+       ahci_populate_sglist()
+
+Both crash with a NULL cur_cmd; the PIO variant has been seen in the
+field.
+
+Cancel the outstanding I/O when the command list is unmapped, reusing
+ide_cancel_dma_sync() as the ATAPI DEVICE RESET command does. It runs
+the completion callback with -ECANCELED (which tears down
+s->bus->dma->aiocb for the DMA case) and orphans the buffered request,
+so the eventual asynchronous completion is a no-op. Merely setting the
+orphaned flag is not enough: it would leave s->bus->dma->aiocb pointing
+at a freed aiocb that a later reset would cancel.
+
+Fixes: 1d8c11d63154 ("ide: add support for IDEBufferedRequest")
+Signed-off-by: Denis V. Lunev <den@openvz.org>
+Message-ID: <20260619112158.304782-2-den@openvz.org>
+[PMD: Use ide_bus_active_if()]
+Signed-off-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+(cherry picked from commit d9f78431d8ebdc2d03ad74461138c1c9eb076aa5)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/ide/ahci.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/hw/ide/ahci.c b/hw/ide/ahci.c
+index 08f51c8e36..80cc386a6a 100644
+--- a/hw/ide/ahci.c
++++ b/hw/ide/ahci.c
+@@ -740,6 +740,9 @@ static bool ahci_map_clb_address(AHCIDevice *ad)
+ 
+ static void ahci_unmap_clb_address(AHCIDevice *ad)
+ {
++    /* Cancel in-flight reads that would complete against a cleared cur_cmd. */
++    ide_cancel_dma_sync(ide_bus_active_if(&ad->port));
++
+     if (ad->lst == NULL) {
+         trace_ahci_unmap_clb_address_null(ad->hba, ad->port_no);
+         return;

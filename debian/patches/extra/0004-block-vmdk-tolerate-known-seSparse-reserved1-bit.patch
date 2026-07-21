@@ -32,10 +32,12 @@ unknown reserved1 bit or a set reserved2 is still refused.
 
 Signed-off-by: Thomas Lamprecht <t.lamprecht@proxmox.com>
 ---
- block/vmdk.c                                 |   3 +-
- .../tests/vmdk-sesparse-reserved             | 105 +++++++++++++++++
- .../tests/vmdk-sesparse-reserved.out         |  14 +++
+ block/vmdk.c                                  |   3 +-
+ .../qemu-iotests/tests/vmdk-sesparse-reserved | 105 ++++++++++++++++++
+ .../tests/vmdk-sesparse-reserved.out          |  14 +++
  3 files changed, 121 insertions(+), 1 deletion(-)
+ create mode 100755 tests/qemu-iotests/tests/vmdk-sesparse-reserved
+ create mode 100644 tests/qemu-iotests/tests/vmdk-sesparse-reserved.out
 
 diff --git a/block/vmdk.c b/block/vmdk.c
 index cd8b4ec7c8..7f8fdf0727 100644

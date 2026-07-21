@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Christian Schoenebeck <qemu_oss@crudebyte.com>
+Date: Fri, 12 Jun 2026 20:22:52 +0200
+Subject: [PATCH] 9pfs/xen: implement msize_limit callback
+
+Add and implement the msize_limit callback for the Xen transport.
+
+The limit is calculated using XEN_FLEX_RING_SIZE() based on the
+negotiated ring_order. For the theoretical maximum ring_order of 9,
+this results in a maximum 'msize' of 1048576 bytes (1 MiB).
+
+The minimum limit of all rings is picked, because multiple rings
+could theoretically have different ring_orders.
+
+Reviewed-by: Stefano Stabellini <sstabellini@kernel.org>
+Link: https://lore.kernel.org/qemu-devel/9471786bc47b93e822f6c6233a83f2b9f61e6c82.1781287774.git.qemu_oss@crudebyte.com
+Signed-off-by: Christian Schoenebeck <qemu_oss@crudebyte.com>
+(cherry picked from commit 815d1799c3d3d6cd058cb4634392ca5a34830450)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/9pfs/xen-9p-backend.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/hw/9pfs/xen-9p-backend.c b/hw/9pfs/xen-9p-backend.c
+index ca0fff5fa9..e31124bcf5 100644
+--- a/hw/9pfs/xen-9p-backend.c
++++ b/hw/9pfs/xen-9p-backend.c
+@@ -250,12 +250,31 @@ static void xen_9pfs_push_and_notify(V9fsPDU *pdu)
+     qemu_bh_schedule(ring->bh);
+ }
+ 
++static size_t xen_9p_msize_limit(V9fsState *s)
++{
++    Xen9pfsDev *xen_9pfs = container_of(s, Xen9pfsDev, state);
++    size_t limit;
++    int i;
++
++    if (!xen_9pfs->num_rings) {
++        return 0;
++    }
++
++    limit = XEN_FLEX_RING_SIZE(xen_9pfs->rings[0].ring_order);
++    for (i = 1; i < xen_9pfs->num_rings; i++) {
++        limit = MIN(limit, XEN_FLEX_RING_SIZE(xen_9pfs->rings[i].ring_order));
++    }
++
++    return limit;
++}
++
+ static const V9fsTransport xen_9p_transport = {
+     .pdu_vmarshal = xen_9pfs_pdu_vmarshal,
+     .pdu_vunmarshal = xen_9pfs_pdu_vunmarshal,
+     .init_in_iov_from_pdu = xen_9pfs_init_in_iov_from_pdu,
+     .init_out_iov_from_pdu = xen_9pfs_init_out_iov_from_pdu,
+     .push_and_notify = xen_9pfs_push_and_notify,
++    .msize_limit = xen_9p_msize_limit,
+ };
+ 
+ static int xen_9pfs_init(struct XenLegacyDevice *xendev)

@@ -71,7 +71,7 @@ index 5e4a82bdbd..acc635aa1d 100644
                                 'features': ['unstable'] } } }
  
 diff --git a/system/vl.c b/system/vl.c
-index 131adb4c3c..2abf709a0d 100644
+index ac9255909f..1d4130bedb 100644
 --- a/system/vl.c
 +++ b/system/vl.c
 @@ -1679,6 +1679,7 @@ static MachineClass *select_machine(QDict *qdict, Error **errp)
@@ -94,7 +94,7 @@ index 131adb4c3c..2abf709a0d 100644
      return machine_class;
  }
  
-@@ -3412,12 +3417,31 @@ void qemu_init(int argc, char **argv)
+@@ -3417,12 +3422,31 @@ void qemu_init(int argc, char **argv)
              case QEMU_OPTION_machine:
                  {
                      bool help;

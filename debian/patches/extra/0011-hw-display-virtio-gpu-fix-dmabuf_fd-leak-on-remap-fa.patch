@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Tue, 7 Jul 2026 17:46:39 +0400
+Subject: [PATCH] hw/display/virtio-gpu: fix dmabuf_fd leak on remap failure
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When virtio_gpu_create_udmabuf() succeeds but virtio_gpu_remap_udmabuf()
+fails (mmap returns MAP_FAILED), virtio_gpu_init_udmabuf() returns early
+without closing the dmabuf fd. Since res->blob is never set in this
+path, later cleanup via virtio_gpu_cleanup_mapping() skips
+virtio_gpu_fini_udmabuf() entirely, leaking the file descriptor.
+
+Call virtio_gpu_destroy_udmabuf() before the early return to close
+the fd. This function already handles partial state correctly: it
+skips the munmap when res->remapped is NULL and closes the fd when
+res->dmabuf_fd >= 0.
+
+Fixes: 9b60cdf98723 ("virtio-gpu: Add udmabuf helpers")
+Reviewed-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+Reviewed-by: Dmitry Osipenko <dmitry.osipenko@collabora.com>
+Reviewed-by: Akihiko Odaki <odaki@rsg.ci.i.u-tokyo.ac.jp>
+Signed-off-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+(cherry picked from commit db2716bce299b35b9b8259f732f80484e4cf9870)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/display/virtio-gpu-udmabuf.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hw/display/virtio-gpu-udmabuf.c b/hw/display/virtio-gpu-udmabuf.c
+index 74b6a7766a..20884f397e 100644
+--- a/hw/display/virtio-gpu-udmabuf.c
++++ b/hw/display/virtio-gpu-udmabuf.c
+@@ -143,6 +143,7 @@ void virtio_gpu_init_udmabuf(struct virtio_gpu_simple_resource *res)
+         }
+         virtio_gpu_remap_udmabuf(res);
+         if (!res->remapped) {
++            virtio_gpu_destroy_udmabuf(res);
+             return;
+         }
+         pdata = res->remapped;

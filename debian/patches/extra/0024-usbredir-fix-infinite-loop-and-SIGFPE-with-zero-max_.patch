@@ -1,0 +1,105 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Thu, 16 Jul 2026 18:11:07 +0400
+Subject: [PATCH] usbredir: fix infinite loop and SIGFPE with zero
+ max_packet_size
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A malicious usbredir peer can send an ep_info message resetting
+max_packet_size to 0 after bulk receiving has started. This causes:
+- infinite loop in usbredir_buffered_bulk_packet() where the splitting
+  loop increments by max_packet_size (0)
+- SIGFPE in usbredir_buffered_bulk_in_complete_ftdi() from modulo by 0
+- SIGFPE in usbredir_handle_buffered_bulk_in_data() from division by 0
+  when computing bytes_per_transfer
+
+Fix by stopping and disabling bulk receiving in usbredir_ep_info() when
+max_packet_size is set to 0.
+
+Add post-load check, and assert() for the invariant.
+
+Fixes: CVE-2026-63319
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/3995
+Reported-by: Tristan @TristanInSec
+Signed-off-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+Reviewed-by: Thomas Huth <thuth@redhat.com>
+Message-ID: <20260716141107.3597076-1-marcandre.lureau@redhat.com>
+Signed-off-by: Thomas Huth <thuth@redhat.com>
+(cherry picked from commit a002485bfef184f04a58adfd2a848c19f583f7d0)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/usb/redirect.c | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/hw/usb/redirect.c b/hw/usb/redirect.c
+index 46db0b73af..5c73d0f19d 100644
+--- a/hw/usb/redirect.c
++++ b/hw/usb/redirect.c
+@@ -690,6 +690,7 @@ static void usbredir_buffered_bulk_in_complete_ftdi(USBRedirDevice *dev,
+     struct buf_packet *bulkp;
+     int count;
+ 
++    assert(maxp != 0);
+     while ((bulkp = QTAILQ_FIRST(&dev->endpoint[EP2I(ep)].bufpq)) &&
+            p->actual_length < p->iov.size && p->status == USB_RET_SUCCESS) {
+         if (bulkp->len < 2) {
+@@ -739,6 +740,7 @@ static void usbredir_handle_buffered_bulk_in_data(USBRedirDevice *dev,
+             .stream_id = 0,
+             .no_transfers = 5,
+         };
++        assert(dev->endpoint[EP2I(ep)].max_packet_size != 0);
+         /* Round bytes_per_transfer up to a multiple of max_packet_size */
+         bpt = 512 + dev->endpoint[EP2I(ep)].max_packet_size - 1;
+         bpt /= dev->endpoint[EP2I(ep)].max_packet_size;
+@@ -793,6 +795,7 @@ static void usbredir_handle_bulk_data(USBRedirDevice *dev, USBPacket *p,
+     }
+ 
+     if (dev->endpoint[EP2I(ep)].bulk_receiving_enabled) {
++        assert(maxp != 0);
+         if (size != 0 && (size % maxp) == 0) {
+             usbredir_handle_buffered_bulk_in_data(dev, p, ep);
+             return;
+@@ -1801,6 +1804,17 @@ static void usbredir_ep_info(void *priv,
+         if (usbredirparser_peer_has_cap(dev->parser,
+                                      usb_redir_cap_ep_info_max_packet_size)) {
+             dev->endpoint[i].max_packet_size = ep_info->max_packet_size[i];
++            if (ep_info->max_packet_size[i] == 0 &&
++                dev->endpoint[i].bulk_receiving_enabled) {
++                USBPacket *p = dev->endpoint[i].pending_async_packet;
++                usbredir_stop_bulk_receiving(dev, I2EP(i));
++                dev->endpoint[i].bulk_receiving_enabled = 0;
++                if (p != NULL) {
++                    dev->endpoint[i].pending_async_packet = NULL;
++                    p->status = USB_RET_IOERROR;
++                    usb_packet_complete(&dev->dev, p);
++                }
++            }
+         }
+ #if USBREDIR_VERSION >= 0x000700
+         if (usbredirparser_peer_has_cap(dev->parser,
+@@ -2161,6 +2175,7 @@ static void usbredir_buffered_bulk_packet(void *priv, uint64_t id,
+     }
+ 
+     /* Data must be in maxp chunks for buffered_bulk_add_*_data_to_packet */
++    assert(dev->endpoint[EP2I(ep)].max_packet_size != 0);
+     len = dev->endpoint[EP2I(ep)].max_packet_size;
+     status = usb_redir_success;
+     free_on_destroy = NULL;
+@@ -2244,6 +2259,15 @@ static int usbredir_post_load(void *priv, int version_id)
+     usbredir_setup_usb_eps(dev);
+     usbredir_check_bulk_receiving(dev);
+ 
++    for (int i = 0; i < MAX_ENDPOINTS; i++) {
++        if (dev->endpoint[i].bulk_receiving_started &&
++            dev->endpoint[i].max_packet_size == 0) {
++            error_report("usbredir: endpoint %d has bulk receiving started "
++                         "with zero max_packet_size", i);
++            return -EINVAL;
++        }
++    }
++
+     return 0;
+ }
+ 

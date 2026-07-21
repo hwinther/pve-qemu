@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Thu, 9 Jul 2026 17:42:25 +0400
+Subject: [PATCH] ui/vnc: fix out-of-bounds write in lossy refresh dirty
+ marking
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+vnc_refresh_lossy_rect() marks a full VNC_STAT_RECT (64) rows of the
+dirty bitmap when refreshing a lossy tile. When the display height is
+not a multiple of VNC_STAT_RECT, the last tile row is a partial tile and
+the loop writes past the end of vs->dirty[VNC_MAX_HEIGHT].
+
+For example, with a 2160-pixel-high display (VNC_MAX_HEIGHT), the last
+stat tile starts at y=2112. The unconditional 64-row loop writes rows
+2112..2175, overflowing 16 rows (640 bytes) past the dirty bitmap into
+subsequent VncState fields.
+
+Fix by passing the effective display height into
+vnc_refresh_lossy_rect() and clamping the inner loop.
+
+Fixes: CVE-2026-61475
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/3935
+Reported-by: "Vulnerability Report" <vr@darknavy.com>
+Reviewed-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+Signed-off-by: Marc-Andre Lureau <marcandre.lureau@redhat.com>
+(cherry picked from commit e650e4fe0fb35b7a8ec9fc04e00346c02640bd58)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ ui/vnc.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/ui/vnc.c b/ui/vnc.c
+index 949ad2aad9..fa4cb92804 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -3010,18 +3010,18 @@ void vnc_sent_lossy_rect(VncWorker *worker, int x, int y, int w, int h)
+     }
+ }
+ 
+-static int vnc_refresh_lossy_rect(VncDisplay *vd, int x, int y)
++static int vnc_refresh_lossy_rect(VncDisplay *vd, int x, int y,
++                                  int height)
+ {
+     VncState *vs;
+     int sty = y / VNC_STAT_RECT;
+     int stx = x / VNC_STAT_RECT;
+     int has_dirty = 0;
+-    int height = MIN(pixman_image_get_height(vd->guest.fb),
+-                     pixman_image_get_height(vd->server));
+     int rows;
+ 
+     y = QEMU_ALIGN_DOWN(y, VNC_STAT_RECT);
+     x = QEMU_ALIGN_DOWN(x, VNC_STAT_RECT);
++    rows = MIN(VNC_STAT_RECT, height - y);
+ 
+     rows = MIN(VNC_STAT_RECT, height - y);
+     if (rows <= 0) {
+@@ -3093,7 +3093,7 @@ static int vnc_update_stats(VncDisplay *vd,  struct timeval * tv)
+ 
+             if (timercmp(&res, &VNC_REFRESH_LOSSY, >)) {
+                 rect->freq = 0;
+-                has_dirty += vnc_refresh_lossy_rect(vd, x, y);
++                has_dirty += vnc_refresh_lossy_rect(vd, x, y, height);
+                 memset(rect->times, 0, sizeof (rect->times));
+                 continue ;
+             }

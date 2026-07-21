@@ -1,0 +1,180 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ilya Leoshkevich <iii@linux.ibm.com>
+Date: Mon, 6 Jul 2026 18:51:23 +0200
+Subject: [PATCH] accel/tcg: Make PageFlagsNodes' start and last immutable
+
+page_check_range() may race with pageflags_set_clear() as follows:
+
+    T1                                     T2
+    -------------------------------------  --------------------------------
+                                           p = pageflags_find(start, last);
+    interval_tree_remove(&p->itree, ...);
+    p->itree.start = last + 1;
+                                           if (start < p->itree.start) {
+                                               ret = false;
+    interval_tree_insert(&p->itree, ...);
+
+leading to errors like
+
+    fail indirect write 0x72f0a659aff0 (Bad address)
+
+in vma-pthread test. I am able to reliably reproduce this on a machine
+with 32 SMT threads as follows in about 25 seconds:
+
+    jobs=32; \
+    seq "$jobs" | \
+        time -p parallel \
+            --jobs="$jobs" \
+            --halt=now,done=1 \
+            --ungroup \
+            '
+                _={};
+                while ./qemu-s390x tests/tcg/s390x-linux-user/vma-pthread; do
+                    printf .;
+                done
+            '
+
+Also wasmtime project reported a similar failure pattern in their CI [1]
+with a similar reproducer [2].
+
+There are other races like this. In general, region bounds mutating
+underneath the reader are very hard to reason about. So fix this by
+preventing mutations and creating copies instead. Use RCU guards in
+readers to avoid uses-after-frees.
+
+Now, when the reader finds a node, it may fearlessly access its fields
+and be certain that at some point in time the respective region had the
+respective bounds and permissions. The downside is slightly more
+expensive mprotect(), but complexity reduction is worth it.
+
+Lockless field accesses should probably be wrapped in qatomic_read(),
+but this is a pre-existing issue, so do not change it here.
+
+[1] https://github.com/bytecodealliance/wasmtime/issues/10000
+[2] https://gist.github.com/alexcrichton/f14f23a892ffb9df2522754572d51b1c
+
+Cc: qemu-stable@nongnu.org
+Reported-by: Alex Crichton <alex@alexcrichton.com>
+Reported-by: Ulrich Weigand <ulrich.weigand@de.ibm.com>
+Fixes: 67ff2186b0a4 ("accel/tcg: Use interval tree for user-only page tracking")
+Signed-off-by: Ilya Leoshkevich <iii@linux.ibm.com>
+Reviewed-by: Richard Henderson <richard.henderson@linaro.org>
+Reviewed-by: Pierrick Bouvier <pierrick.bouvier@oss.qualcomm.com>
+Signed-off-by: Richard Henderson <richard.henderson@linaro.org>
+Message-ID: <20260706165445.57418-2-iii@linux.ibm.com>
+(cherry picked from commit e03b7dac65d96d7d9b34bb88803029cf5ec7e4a9)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ accel/tcg/user-exec.c | 37 +++++++++++++++++++++----------------
+ 1 file changed, 21 insertions(+), 16 deletions(-)
+
+diff --git a/accel/tcg/user-exec.c b/accel/tcg/user-exec.c
+index dd0bcde4d4..7cd26a238d 100644
+--- a/accel/tcg/user-exec.c
++++ b/accel/tcg/user-exec.c
+@@ -238,13 +238,16 @@ void page_dump(FILE *f)
+ 
+ int page_get_flags(vaddr address)
+ {
+-    PageFlagsNode *p = pageflags_find(address, address);
++    PageFlagsNode *p;
++
++    RCU_READ_LOCK_GUARD();
+ 
+     /*
+      * See util/interval-tree.c re lockless lookups: no false positives but
+      * there are false negatives.  If we find nothing, retry with the mmap
+      * lock acquired.
+      */
++    p = pageflags_find(address, address);
+     if (p) {
+         return p->flags;
+     }
+@@ -300,15 +303,15 @@ static void pageflags_create_merge(vaddr start, vaddr last, int flags)
+ 
+     if (prev) {
+         if (next) {
+-            prev->itree.last = next->itree.last;
++            pageflags_create(prev->itree.start, next->itree.last, flags);
+             g_free_rcu(next, rcu);
+         } else {
+-            prev->itree.last = last;
++            pageflags_create(prev->itree.start, last, flags);
+         }
+-        interval_tree_insert(&prev->itree, &pageflags_root);
++        g_free_rcu(prev, rcu);
+     } else if (next) {
+-        next->itree.start = start;
+-        interval_tree_insert(&next->itree, &pageflags_root);
++        pageflags_create(start, next->itree.last, flags);
++        g_free_rcu(next, rcu);
+     } else {
+         pageflags_create(start, last, flags);
+     }
+@@ -370,8 +373,8 @@ static bool pageflags_set_clear(vaddr start, vaddr last,
+     if (set_flags != merge_flags) {
+         if (p_start < start) {
+             interval_tree_remove(&p->itree, &pageflags_root);
+-            p->itree.last = start - 1;
+-            interval_tree_insert(&p->itree, &pageflags_root);
++            pageflags_create(p_start, start - 1, p_flags);
++            g_free_rcu(p, rcu);
+ 
+             if (last < p_last) {
+                 if (merge_flags & PAGE_VALID) {
+@@ -393,11 +396,11 @@ static bool pageflags_set_clear(vaddr start, vaddr last,
+             }
+             if (last < p_last) {
+                 interval_tree_remove(&p->itree, &pageflags_root);
+-                p->itree.start = last + 1;
+-                interval_tree_insert(&p->itree, &pageflags_root);
++                pageflags_create(last + 1, p_last, p_flags);
+                 if (merge_flags & PAGE_VALID) {
+                     pageflags_create(start, last, merge_flags);
+                 }
++                g_free_rcu(p, rcu);
+             } else {
+                 if (merge_flags & PAGE_VALID) {
+                     p->flags = merge_flags;
+@@ -418,8 +421,8 @@ static bool pageflags_set_clear(vaddr start, vaddr last,
+     if (set_flags == p_flags) {
+         if (start < p_start) {
+             interval_tree_remove(&p->itree, &pageflags_root);
+-            p->itree.start = start;
+-            interval_tree_insert(&p->itree, &pageflags_root);
++            pageflags_create(start, p_last, p_flags);
++            g_free_rcu(p, rcu);
+         }
+         if (p_last < last) {
+             start = p_last + 1;
+@@ -431,8 +434,8 @@ static bool pageflags_set_clear(vaddr start, vaddr last,
+     /* Maybe split out head and/or tail ranges with the original flags. */
+     interval_tree_remove(&p->itree, &pageflags_root);
+     if (p_start < start) {
+-        p->itree.last = start - 1;
+-        interval_tree_insert(&p->itree, &pageflags_root);
++        pageflags_create(p_start, start - 1, p_flags);
++        g_free_rcu(p, rcu);
+ 
+         if (p_last < last) {
+             goto restart;
+@@ -441,8 +444,8 @@ static bool pageflags_set_clear(vaddr start, vaddr last,
+             pageflags_create(last + 1, p_last, p_flags);
+         }
+     } else if (last < p_last) {
+-        p->itree.start = last + 1;
+-        interval_tree_insert(&p->itree, &pageflags_root);
++        pageflags_create(last + 1, p_last, p_flags);
++        g_free_rcu(p, rcu);
+     } else {
+         g_free_rcu(p, rcu);
+         goto restart;
+@@ -504,6 +507,8 @@ bool page_check_range(vaddr start, vaddr len, int flags)
+         return false; /* wrap around */
+     }
+ 
++    RCU_READ_LOCK_GUARD();
++
+     locked = have_mmap_lock();
+     while (true) {
+         PageFlagsNode *p = pageflags_find(start, last);

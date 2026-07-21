@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Mon, 6 Jul 2026 14:40:39 +0400
+Subject: [PATCH] ui/vnc: validate color shifts in SetPixelFormat
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A malicious VNC client can send a SetPixelFormat message with shift
+values >= 32, causing UB mask computation
+(e.g. red_max << red_shift where red_shift is 255). Apparently, this is
+not covered by -fwrapv.
+
+Reject color shifts >= bits_per_pixel || 32 before computing masks.
+
+Fixes: 9f64916da20 ("pixman/vnc: use pixman images in vnc.")
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/3948
+Reported-by: huntr bubble
+Reviewed-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+Signed-off-by: Marc-Andre Lureau <marcandre.lureau@redhat.com>
+(cherry picked from commit fb71c895d7ff3c68f228095b5e6494e6c23b6a0b)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ ui/vnc.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/ui/vnc.c b/ui/vnc.c
+index 1e6490f273..d2ae127f0b 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -2282,6 +2282,13 @@ static void set_pixel_format(VncState *vs, int bits_per_pixel,
+         return;
+     }
+ 
++    if (red_shift >= bits_per_pixel || red_shift >= 32 ||
++        green_shift >= bits_per_pixel || green_shift >= 32 ||
++        blue_shift >= bits_per_pixel || blue_shift >= 32) {
++        vnc_client_error(vs);
++        return;
++    }
++
+     vs->client_pf.rmax = red_max ? red_max : 0xFF;
+     vs->client_pf.rbits = ctpopl(red_max);
+     vs->client_pf.rshift = red_shift;

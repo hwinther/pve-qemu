@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Christian Schoenebeck <qemu_oss@crudebyte.com>
+Date: Fri, 12 Jun 2026 20:22:52 +0200
+Subject: [PATCH] hw/9pfs: cap negotiated msize to transport limit
+
+The 'msize' parameter negotiated during Tversion handshake can be
+arbitrarily large as requested by the guest. So far 9p server accepted
+any msize value suggested by guest, i.e. server did not cap it at all,
+no matter how large, as in practice the upper limit of msize is a client
+capability. But as subsequent's security patch shows, capping msize on
+server side makes sense as additional safety-net.
+
+Let's cap msize to transport's theoretical limit for msize, mainly to
+prevent a bad client from triggering excessive host memory allocations
+throughout the session.
+
+We intentionally don't cap msize to transport's current, real response
+buffer size, as the response buffer size may vary between individual
+requests.
+
+Link: https://lore.kernel.org/qemu-devel/2105e9a3578c6f751bb64af55c16dd953f393f20.1781287774.git.qemu_oss@crudebyte.com
+Signed-off-by: Christian Schoenebeck <qemu_oss@crudebyte.com>
+(cherry picked from commit bb5ab96e35a1b13a2485d239a44ff2d040e9b337)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/9pfs/9p.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/hw/9pfs/9p.c b/hw/9pfs/9p.c
+index 936e4e9349..0ccfd85ca2 100644
+--- a/hw/9pfs/9p.c
++++ b/hw/9pfs/9p.c
+@@ -1469,6 +1469,16 @@ static void coroutine_fn v9fs_version(void *opaque)
+         goto out;
+     }
+ 
++    /* cap msize to transport's theoretical limit */
++    if (s->transport->msize_limit) {
++        size_t limit = s->transport->msize_limit(s);
++        if (s->msize > limit) {
++            s->msize = limit;
++            warn_report_once("9p: client msize capped to %zu (transport limit)",
++                             limit);
++        }
++    }
++
+     /* 8192 is the default msize of Linux clients */
+     if (s->msize <= 8192 && !(s->ctx.export_flags & V9FS_NO_PERF_WARN)) {
+         warn_report_once(

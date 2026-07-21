@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sanjeeva Yerrapureddy <y.sanjeevreddy@gmail.com>
+Date: Mon, 29 Jun 2026 09:21:23 -0600
+Subject: [PATCH] hw/net: fix e1000e/igb ip_len inflation by Ethernet
+ minimum-frame padding
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When a guest transmits a short Ethernet frame, iov_size() returns the
+padded wire length including any bytes added to reach the Ethernet
+minimum frame size of 60 bytes.  net_tx_pkt_rebuild_payload() uses
+this inflated size as payload_len.  net_tx_pkt_update_ip_hdr_checksum()
+then overwrites the IPv4 Total Length field with payload_len +
+l3_hdr_len, inflating it by the padding.  The receiver interprets
+Ethernet padding as IP payload, producing a malformed packet.
+
+Fix by removing the ip_len write from net_tx_pkt_update_ip_hdr_checksum()
+so it only recomputes the checksum, and moving the ip_len assignment
+into net_tx_pkt_update_ip_checksums() where it is only performed for
+TSO (where ip_len must be derived from payload_len since the guest sets
+ip_len=0 per Intel 82574 datasheet §7.3.4 for super-packets the host
+will segment).
+
+Both e1000e and igb already call net_tx_pkt_update_ip_hdr_checksum()
+from their IXSM paths, so both are corrected by this single common-
+layer change.
+
+Signed-off-by: Sanjeeva Yerrapureddy <y.sanjeevreddy@gmail.com>
+Reivewed-by: Akihiko Odaki <odaki@rsg.ci.i.u-tokyo.ac.jp>
+Reviewed-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+Message-ID: <20260629-net-tx-pkt-ip-length-padding-v5-1-16760e30252e@gmail.com>
+Signed-off-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+(cherry picked from commit 9e41b5d22aeb942ad6ecc3174504ff645a10da6a)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/net/net_tx_pkt.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/hw/net/net_tx_pkt.c b/hw/net/net_tx_pkt.c
+index 903238dca2..b134348fe8 100644
+--- a/hw/net/net_tx_pkt.c
++++ b/hw/net/net_tx_pkt.c
+@@ -93,9 +93,6 @@ void net_tx_pkt_update_ip_hdr_checksum(struct NetTxPkt *pkt)
+     uint16_t csum;
+     assert(pkt);
+ 
+-    pkt->l3_hdr.ip.ip_len = cpu_to_be16(pkt->payload_len +
+-        pkt->vec[NET_TX_PKT_L3HDR_FRAG].iov_len);
+-
+     pkt->l3_hdr.ip.ip_sum = 0;
+     csum = net_raw_checksum(pkt->l3_hdr.octets,
+         pkt->vec[NET_TX_PKT_L3HDR_FRAG].iov_len);
+@@ -117,7 +114,9 @@ void net_tx_pkt_update_ip_checksums(struct NetTxPkt *pkt)
+ 
+     if (gso_type == VIRTIO_NET_HDR_GSO_TCPV4 ||
+         gso_type == VIRTIO_NET_HDR_GSO_UDP) {
+-        /* Calculate IP header checksum */
++        /* Set ip_len and calculate IP header checksum */
++        pkt->l3_hdr.ip.ip_len = cpu_to_be16(pkt->payload_len +
++            pkt->vec[NET_TX_PKT_L3HDR_FRAG].iov_len);
+         net_tx_pkt_update_ip_hdr_checksum(pkt);
+ 
+         /* Calculate IP pseudo header checksum */

@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Junjie Cao <junjie.cao@intel.com>
+Date: Tue, 24 Mar 2026 14:01:00 +0800
+Subject: [PATCH] virtio-net: validate RSS indirections_len in post_load
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+virtio_net_handle_rss() enforces that indirections_len is a non-zero
+power of two no larger than VIRTIO_NET_RSS_MAX_TABLE_LEN, but
+virtio_net_rss_post_load() applies none of these checks to values
+restored from the migration stream.
+
+A corrupted save file or crafted migration stream can set
+indirections_len to 0.  Even if it also clears redirect,
+virtio_load() calls set_features_nocheck() after the device vmstate
+(including the RSS subsection and its post_load) has already been
+loaded, re-deriving redirect from the negotiated guest features.
+When VIRTIO_NET_F_RSS was negotiated, redirect is set back to true
+regardless of the migration stream value.  The receive path then
+computes
+
+    hash & (indirections_len - 1)   /* wraps to 0xFFFFFFFF via int promotion */
+
+and uses the result to index into indirections_table, which was not
+allocated by the VMState loader when the element count is zero (see
+vmstate_handle_alloc()), resulting in a NULL pointer dereference that
+crashes QEMU:
+
+  #0  virtio_net_process_rss    ../hw/net/virtio-net.c:1901
+  #1  virtio_net_receive_rcu    ../hw/net/virtio-net.c:1921
+  #2  virtio_net_do_receive     ../hw/net/virtio-net.c:2061
+  #3  nc_sendv_compat           ../net/net.c:823
+  #4  qemu_deliver_packet_iov   ../net/net.c:870
+
+The RSS subsection is only loaded when rss_data.enabled is true (via
+virtio_net_rss_needed()), and the command path always produces
+indirections_len in {1, 2, 4, …, 128}, so an unconditional check
+cannot reject a legitimate migration stream.
+
+Factor the validation into virtio_net_rss_indirections_len_valid()
+and call it from both virtio_net_handle_rss() and
+virtio_net_rss_post_load().
+
+Fixes: e41b711485e5 ("virtio-net: add migration support for RSS and hash report")
+Cc: qemu-stable@nongnu.org
+Signed-off-by: Junjie Cao <junjie.cao@intel.com>
+Reviewed-by: Michael S. Tsirkin <mst@redhat.com>
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+Message-ID: <20260324060100.1997-1-junjie.cao@intel.com>
+(cherry picked from commit 32a90850e1e4222091df07b4b46d5f46a8b90d24)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/net/virtio-net.c | 21 ++++++++++++++-------
+ 1 file changed, 14 insertions(+), 7 deletions(-)
+
+diff --git a/hw/net/virtio-net.c b/hw/net/virtio-net.c
+index 2a5d642a64..f0e3beb290 100644
+--- a/hw/net/virtio-net.c
++++ b/hw/net/virtio-net.c
+@@ -1374,6 +1374,11 @@ static void virtio_net_unload_ebpf(VirtIONet *n)
+     ebpf_rss_unload(&n->ebpf_rss);
+ }
+ 
++static bool virtio_net_rss_indirections_len_valid(uint16_t len)
++{
++    return is_power_of_2(len) && len <= VIRTIO_NET_RSS_MAX_TABLE_LEN;
++}
++
+ static uint16_t virtio_net_handle_rss(VirtIONet *n,
+                                       struct iovec *iov,
+                                       unsigned int iov_cnt,
+@@ -1411,14 +1416,9 @@ static uint16_t virtio_net_handle_rss(VirtIONet *n,
+     if (!do_rss) {
+         n->rss_data.indirections_len = 0;
+     }
+-    if (n->rss_data.indirections_len >= VIRTIO_NET_RSS_MAX_TABLE_LEN) {
+-        err_msg = "Too large indirection table";
+-        err_value = n->rss_data.indirections_len;
+-        goto error;
+-    }
+     n->rss_data.indirections_len++;
+-    if (!is_power_of_2(n->rss_data.indirections_len)) {
+-        err_msg = "Invalid size of indirection table";
++    if (!virtio_net_rss_indirections_len_valid(n->rss_data.indirections_len)) {
++        err_msg = "Invalid indirection table length";
+         err_value = n->rss_data.indirections_len;
+         goto error;
+     }
+@@ -3427,6 +3427,13 @@ static int virtio_net_rss_post_load(void *opaque, int version_id)
+         n->rss_data.supported_hash_types = VIRTIO_NET_RSS_SUPPORTED_HASHES;
+     }
+ 
++    if (!virtio_net_rss_indirections_len_valid(n->rss_data.indirections_len)) {
++        error_report("virtio-net: saved image has invalid RSS "
++                     "indirections_len: %u",
++                     n->rss_data.indirections_len);
++        return -EINVAL;
++    }
++
+     return 0;
+ }
+ 

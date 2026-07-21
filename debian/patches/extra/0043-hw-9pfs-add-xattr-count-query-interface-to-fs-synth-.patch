@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Christian Schoenebeck <qemu_oss@crudebyte.com>
+Date: Sat, 13 Jun 2026 16:55:49 +0200
+Subject: [PATCH] hw/9pfs: add xattr count query interface to fs synth driver
+
+Add a synthetic "/stat/xattr_count" file path that, if being read
+by 9p client, returns the 9p server internal xattr FID counter to
+client.
+
+This allows to test and verify that the xattr FID limit is being
+enforced correctly.
+
+Link: https://lore.kernel.org/qemu-devel/357c20fc244c04dcbd36b13aa20a5c9b2034e9f0.1781361555.git.qemu_oss@crudebyte.com
+Signed-off-by: Christian Schoenebeck <qemu_oss@crudebyte.com>
+(cherry picked from commit 7e42d569a68aec6b0b6f1f068328c5c4ff20bc72)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/9pfs/9p-synth.c | 26 ++++++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+
+diff --git a/hw/9pfs/9p-synth.c b/hw/9pfs/9p-synth.c
+index 4b0732e093..3b3654b282 100644
+--- a/hw/9pfs/9p-synth.c
++++ b/hw/9pfs/9p-synth.c
+@@ -565,6 +565,19 @@ static ssize_t v9fs_synth_qtest_flush_write(void *buf, int len, off_t offset,
+     return 1;
+ }
+ 
++/* transmits internal xattr counter to client */
++static ssize_t v9fs_synth_read_xattr_count(void *buf, int len, off_t offset,
++                                           void *arg)
++{
++    FsContext *ctx = arg;
++    size_t local_count = ctx->xattr_fid_count;
++    if (len < (int)sizeof(size_t)) {
++        return -ENOSPC;
++    }
++    memcpy(buf, &local_count, sizeof(size_t));
++    return sizeof(size_t);
++}
++
+ static int synth_init(FsContext *ctx, Error **errp)
+ {
+     QLIST_INIT(&synth_root.child);
+@@ -626,6 +639,19 @@ static int synth_init(FsContext *ctx, Error **errp)
+                 g_free(name);
+             }
+         }
++
++        /* Directory for internal statistic queries */
++        {
++            V9fsSynthNode *stat_dir = NULL;
++            ret = qemu_v9fs_synth_mkdir(NULL, 0755, "stat", &stat_dir);
++            assert(!ret);
++
++            /* File for internal xattr count query */
++            ret = qemu_v9fs_synth_add_file(stat_dir, 0444, "xattr_count",
++                                           v9fs_synth_read_xattr_count,
++                                           NULL, ctx);
++            assert(!ret);
++        }
+     }
+ 
+     return 0;

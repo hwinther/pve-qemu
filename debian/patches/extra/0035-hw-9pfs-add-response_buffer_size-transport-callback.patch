@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Christian Schoenebeck <qemu_oss@crudebyte.com>
+Date: Fri, 12 Jun 2026 20:22:52 +0200
+Subject: [PATCH] hw/9pfs: add response_buffer_size transport callback
+
+Add a new callback to the V9fsTransport interface that allows each transport
+to provide the real size of its current response buffer.
+
+This is needed for subsequent safety guards that will limit generated
+responses appropriately before trying to allocate, generate, and send a
+response to guest.
+
+This is especially required for request handlers that need to allocate
+dynamic and potentially large host memory for generating a response. These
+safety guards are mandatory to counter bad clients that try to trick server
+by supplying response buffers being smaller than the previously negotiated
+msize value.
+
+Link: https://lore.kernel.org/qemu-devel/703ed8ce4401c4550ef2cd99f30ab808665d6e85.1781287774.git.qemu_oss@crudebyte.com
+Signed-off-by: Christian Schoenebeck <qemu_oss@crudebyte.com>
+(cherry picked from commit 4b615eaa1be4a54fb677c302e1a86fe09a94aecd)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/9pfs/9p.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hw/9pfs/9p.h b/hw/9pfs/9p.h
+index d8f364fafd..1a309664f6 100644
+--- a/hw/9pfs/9p.h
++++ b/hw/9pfs/9p.h
+@@ -482,6 +482,7 @@ struct V9fsTransport {
+                                          unsigned int *pniov, size_t size);
+     void        (*push_and_notify)(V9fsPDU *pdu);
+     size_t      (*msize_limit)(V9fsState *s);
++    size_t      (*response_buffer_size)(V9fsPDU *pdu);
+ };
+ 
+ #endif

@@ -61,10 +61,10 @@ Message-ID: <20250618102531.57444-1-f.ebner@proxmox.com>
  5 files changed, 29 insertions(+), 4 deletions(-)
 
 diff --git a/block/vmdk.c b/block/vmdk.c
-index cd8b4ec7c8..1f64ab1766 100644
+index 7f8fdf0727..5385a09fe5 100644
 --- a/block/vmdk.c
 +++ b/block/vmdk.c
-@@ -1404,9 +1404,7 @@ static int vmdk_open(BlockDriverState *bs, QDict *options, int flags,
+@@ -1405,9 +1405,7 @@ static int vmdk_open(BlockDriverState *bs, QDict *options, int flags,
      qemu_co_mutex_init(&s->lock);
  
      /* Disable migration when VMDK images are used */

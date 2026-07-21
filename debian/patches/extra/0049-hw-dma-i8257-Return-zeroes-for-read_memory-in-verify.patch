@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Peter Maydell <peter.maydell@linaro.org>
+Date: Mon, 29 Jun 2026 15:01:28 +0100
+Subject: [PATCH] hw/dma/i8257: Return zeroes for read_memory in verify mode
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The i8257 DMA controller has a "verify" mode, which the datasheet
+describes like this:
+
+> DMA verify, which does not actually involve the transfer of data.
+> When an 8257 channel is in the DMA verify mode, it will respond the
+> same as described for transfer operations, except that no memory or
+> I/O read/write control signals will be generated.  When an 8257
+> channel is in the DMA verify mode, it will respond the same as
+> described for transfer operations, except that no memory or I/O read
+> /write control signals will be generated, thus preventing the
+> transfer of data.  The 8257, however, will gain control of the system
+> bus and will acknowledge the peripheral's DMA request for each DMA
+> cycle.  The perihperal can use these acknowledge signals to enable an
+> internal access of each byte of a data block in order to execute some
+> verification procedure, such as the accumulation of a CRC check word.
+
+In practice, for QEMU's purposes the only real user of this is the
+floppy controller, which can be made to perform a "read data from
+floppy disk and check the checksum" by telling the fdc to do a read
+and the DMA controller to do a verify.  This causes the fdc to do all
+the usual read actions including the checksum, but the data is never
+written to memory.  However, it is possible for a guest doing
+something silly to program the DMA controller to do a verify
+operation for a device that wants to read from memory.  Currently we
+simply return early from i8257_dma_read_memory() without writing to
+the buffer.  None of the callers (the GUS, sb16 and cs4231a sound
+cards, plus the fdc) expect this, so they will take the uninitialized
+data as if it were from the guest.  This can cause us to leak host
+data off the stack into the guest.
+
+Make i8257_dma_read_memory() fill the buffer with zeroes rather
+than leaving it untouched for a verify operation.
+
+Cc: qemu-stable@nongnu.org
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/3487
+Signed-off-by: Peter Maydell <peter.maydell@linaro.org>
+Reviewed-by: Daniel P. Berrangé <berrange@redhat.com>
+Message-ID: <20260629140128.1900095-1-peter.maydell@linaro.org>
+Signed-off-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+(cherry picked from commit 03071f99a3e1549b3acc9b9534961632df016f76)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/dma/i8257.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/hw/dma/i8257.c b/hw/dma/i8257.c
+index 3637d8f82d..34c19dbd84 100644
+--- a/hw/dma/i8257.c
++++ b/hw/dma/i8257.c
+@@ -407,6 +407,19 @@ static int i8257_dma_read_memory(IsaDma *obj, int nchan, void *buf, int pos,
+     hwaddr addr = ((r->pageh & 0x7f) << 24) | (r->page << 16) | r->now[ADDR];
+ 
+     if (i8257_is_verify_transfer(r)) {
++        /*
++         * If the device is expecting this verify operation then
++         * it won't care about the nonexistent data. But if it
++         * is expecting a real read (i.e. the guest has misprogrammed
++         * the DMA controller and the device) it's going to try to do
++         * something with the buffer contents. Give it zeroes.
++         * (It's not clear whether this is exactly what happens if
++         * you do this on real hardware. In practice no device QEMU
++         * emulates has a use for verify on a memory-read transfer,
++         * so we don't care beyond avoiding the guest being able to
++         * trigger the caller reading uninitialized data.)
++         */
++        memset(buf, 0, len);
+         return len;
+     }
+ 

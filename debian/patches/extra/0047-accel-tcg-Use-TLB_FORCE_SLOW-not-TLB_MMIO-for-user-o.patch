@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Richard Henderson <richard.henderson@linaro.org>
+Date: Thu, 2 Jul 2026 10:10:56 -0700
+Subject: [PATCH] accel/tcg: Use TLB_FORCE_SLOW not TLB_MMIO for user-only
+ plugins
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In 6d03226b422 we set TLB_MMIO to a non-zero value for user-only
+so that we could return a non-zero value from probe_* functions
+so that we could force callers like Arm SVE vector moves to use
+the slow path rather than direct access.  All for the sake of
+exposing these accesses to plugins.
+
+Back then, TLB_FORCE_SLOW did not exist, so TLB_MMIO seemed like
+a reasonable solution.  However, user-only doesn't really have
+MMIO and this has knock-on effects, like forcing Arm SVE first-fault
+vector loads to stop.  Better to use TLB_FORCE_SLOW as a more exact
+trigger for plugins.
+
+Cc: qemu-stable@nongnu.org
+Fixes: 6d03226b422 ("plugins: force slow path when plugins instrument memory ops")
+Acked-by: Alex Bennée <alex.bennee@linaro.org>
+Reviewed-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+Signed-off-by: Richard Henderson <richard.henderson@linaro.org>
+Message-ID: <20260702171057.47998-1-richard.henderson@linaro.org>
+(cherry picked from commit b79a9b6e5b5657534615dd8e574d58305e16841c)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ accel/tcg/user-exec.c    | 4 ++--
+ include/exec/tlb-flags.h | 7 ++++---
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/accel/tcg/user-exec.c b/accel/tcg/user-exec.c
+index d283d3cc72..dd0bcde4d4 100644
+--- a/accel/tcg/user-exec.c
++++ b/accel/tcg/user-exec.c
+@@ -768,7 +768,7 @@ static int probe_access_internal(CPUArchState *env, vaddr addr,
+         if (page_flags & acc_flag) {
+             if (access_type != MMU_INST_FETCH
+                 && cpu_plugin_mem_cbs_enabled(env_cpu(env))) {
+-                return TLB_MMIO;
++                return TLB_FORCE_SLOW;
+             }
+             return 0; /* success */
+         }
+@@ -803,7 +803,7 @@ void *probe_access(CPUArchState *env, vaddr addr, int size,
+ 
+     g_assert(-(addr | TARGET_PAGE_MASK) >= size);
+     flags = probe_access_internal(env, addr, size, access_type, false, ra);
+-    g_assert((flags & ~TLB_MMIO) == 0);
++    g_assert((flags & ~TLB_FORCE_SLOW) == 0);
+ 
+     return size ? g2h_vaddr(env_cpu(env), addr) : NULL;
+ }
+diff --git a/include/exec/tlb-flags.h b/include/exec/tlb-flags.h
+index 357e79095c..e12cddf234 100644
+--- a/include/exec/tlb-flags.h
++++ b/include/exec/tlb-flags.h
+@@ -27,12 +27,13 @@
+ 
+ /*
+  * Allow some level of source compatibility with softmmu.
+- * Invalid is set when the page does not have requested permissions.
+- * MMIO is set when we want the target helper to use the functional
++ * INVALID is set when the page does not have requested permissions.
++ * FORCE_SLOW is set when we want the target helper to use the functional
+  * interface for load/store so that plugins see the access.
+  */
+ #define TLB_INVALID_MASK     (1 << 0)
+-#define TLB_MMIO             (1 << 1)
++#define TLB_FORCE_SLOW       (1 << 1)
++#define TLB_MMIO             0
+ #define TLB_WATCHPOINT       0
+ 
+ #else

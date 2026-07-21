@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Mon, 13 Jul 2026 13:24:03 +0400
+Subject: [PATCH] ui/vnc: validate SetPixelFormat field ranges
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The VNC SetPixelFormat message carries red/green/blue_max as 16-bit
+values, but PixelFormat stores them as uint8_t. A client sending a
+max value above 255 (e.g. 0x0100) passes the existing non-zero check
+but silently truncates to 0 on assignment, leading to a division by
+zero in the Tight PNG palette path.
+
+Add explicit range checks if any channel max exceeds UINT8_MAX.
+
+Fixes: CVE-2026-15578
+Resolves: https://gitlab.com/qemu-project/qemu/-/issues/3976
+Reported-by: dong ling
+Reviewed-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+Reviewed-by: Daniel P. Berrangé <berrange@redhat.com>
+Signed-off-by: Marc-Andre Lureau <marcandre.lureau@redhat.com>
+(cherry picked from commit 6075444c5a72ab531295d92050d95cebea8a8119)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ ui/vnc.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/ui/vnc.c b/ui/vnc.c
+index fa4cb92804..1f06cf04a7 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -2277,6 +2277,11 @@ static void set_pixel_format(VncState *vs, uint8_t bits_per_pixel,
+         return;
+     }
+ 
++    if (red_max > UINT8_MAX || green_max > UINT8_MAX || blue_max > UINT8_MAX) {
++        vnc_client_error(vs);
++        return;
++    }
++
+     if (red_shift >= bits_per_pixel || red_shift >= 32 ||
+         green_shift >= bits_per_pixel || green_shift >= 32 ||
+         blue_shift >= bits_per_pixel || blue_shift >= 32) {

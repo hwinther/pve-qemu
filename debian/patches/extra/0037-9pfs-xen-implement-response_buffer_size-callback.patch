@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Christian Schoenebeck <qemu_oss@crudebyte.com>
+Date: Fri, 12 Jun 2026 20:22:52 +0200
+Subject: [PATCH] 9pfs/xen: implement response_buffer_size callback
+
+Add and implement the response_buffer_size callback for the Xen
+transport.
+
+Returns the size of the response buffer from the rings in_sg, as limit
+for 9p server while generating a response for supplied PDU.
+
+We use a local iovec array variable in_sg[2] instead of ring->sg, as
+ring->sg is only allocated by init_in_iov_from_pdu() and
+init_out_iov_from_pdu() during request / response processing.
+response_buffer_size() however may be called before those allocators,
+which would dereference ring->sg as NULL pointer. The local array
+avoids this.
+
+Reviewed-by: Stefano Stabellini <sstabellini@kernel.org>
+Link: https://lore.kernel.org/qemu-devel/3b139769eb1d3f9d91ee5281228e6467f9a08b99.1781287774.git.qemu_oss@crudebyte.com
+Signed-off-by: Christian Schoenebeck <qemu_oss@crudebyte.com>
+(cherry picked from commit 69c8f5e6946f76a70b141a340c7aeb9d6a8e3c27)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/9pfs/xen-9p-backend.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/hw/9pfs/xen-9p-backend.c b/hw/9pfs/xen-9p-backend.c
+index e31124bcf5..24c90d97ec 100644
+--- a/hw/9pfs/xen-9p-backend.c
++++ b/hw/9pfs/xen-9p-backend.c
+@@ -268,6 +268,17 @@ static size_t xen_9p_msize_limit(V9fsState *s)
+     return limit;
+ }
+ 
++static size_t xen_9pfs_response_buffer_size(V9fsPDU *pdu)
++{
++    Xen9pfsDev *priv = container_of(pdu->s, Xen9pfsDev, state);
++    Xen9pfsRing *ring = &priv->rings[pdu->tag % priv->num_rings];
++    struct iovec in_sg[2];
++    int num;
++
++    xen_9pfs_in_sg(ring, in_sg, &num, pdu->idx, 0);
++    return iov_size(in_sg, num);
++}
++
+ static const V9fsTransport xen_9p_transport = {
+     .pdu_vmarshal = xen_9pfs_pdu_vmarshal,
+     .pdu_vunmarshal = xen_9pfs_pdu_vunmarshal,
+@@ -275,6 +286,7 @@ static const V9fsTransport xen_9p_transport = {
+     .init_out_iov_from_pdu = xen_9pfs_init_out_iov_from_pdu,
+     .push_and_notify = xen_9pfs_push_and_notify,
+     .msize_limit = xen_9p_msize_limit,
++    .response_buffer_size = xen_9pfs_response_buffer_size,
+ };
+ 
+ static int xen_9pfs_init(struct XenLegacyDevice *xendev)

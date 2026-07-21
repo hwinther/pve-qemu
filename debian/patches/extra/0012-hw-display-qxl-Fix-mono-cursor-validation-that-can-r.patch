@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Thomas Huth <thuth@redhat.com>
+Date: Tue, 30 Jun 2026 12:10:22 +0200
+Subject: [PATCH] hw/display/qxl: Fix mono cursor validation that can read past
+ a cursor chunk
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+qxl_render_cursor() maps the guest-provided QXLCursor object using the
+guest-controlled cursor->chunk.data_size.
+For a mono cursor, qxl_cursor() then validates the expected bitmap size
+against cursor->data_size, but it does not validate that the first chunk
+actually contains that many bytes.
+A guest could set cursor->data_size to the correct full mono cursor size
+while setting cursor->chunk.data_size to zero. In that case, cursor_set_mono()
+reads the AND/XOR masks starting at cursor->chunk.data. If the cursor object
+is placed at the end of the QXL RAM BAR, those reads cross the mapped RAM
+region and could crash the QEMU process (e.g. under ASan).
+
+Fix it by double-checking cursor->chunk.data_size for the correct size.
+
+This patch is based on the suggested changes by the reporter in the bug
+ticket.
+
+Reported-by: huntr bubble
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/3646
+Signed-off-by: Thomas Huth <thuth@redhat.com>
+Acked-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+Message-ID: <20260630101022.379057-1-thuth@redhat.com>
+Signed-off-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+(cherry picked from commit 0e51b71c7b7706923536c1f7923cace82877932b)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/display/qxl-render.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/hw/display/qxl-render.c b/hw/display/qxl-render.c
+index c6a9ac1da1..1fe63b6f5c 100644
+--- a/hw/display/qxl-render.c
++++ b/hw/display/qxl-render.c
+@@ -272,9 +272,11 @@ static QEMUCursor *qxl_cursor(PCIQXLDevice *qxl, QXLCursor *cursor,
+     case SPICE_CURSOR_TYPE_MONO:
+         /* Assume that the full cursor is available in a single chunk. */
+         size = 2 * cursor_get_mono_bpl(c) * c->height;
+-        if (size != cursor->data_size) {
+-            fprintf(stderr, "%s: bad monochrome cursor %ux%u with size %u\n",
+-                    __func__, c->width, c->height, cursor->data_size);
++        if (size != cursor->data_size || cursor->chunk.data_size < size) {
++            qxl_set_guest_bug(qxl, "%s: bad monochrome cursor %ux%u"
++                              " data_size %u chunk_size %u",
++                              __func__, c->width, c->height,
++                              cursor->data_size, cursor->chunk.data_size);
+             goto fail;
+         }
+         and_mask = cursor->chunk.data;

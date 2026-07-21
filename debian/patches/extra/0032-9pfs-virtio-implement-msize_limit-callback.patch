@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Christian Schoenebeck <qemu_oss@crudebyte.com>
+Date: Fri, 12 Jun 2026 20:22:52 +0200
+Subject: [PATCH] 9pfs/virtio: implement msize_limit callback
+
+Add and implement the msize_limit callback for the virtio transport.
+
+This new callback function provides the theoretical maximum 'msize'
+value supported by this virtio transport.
+
+The limit is calculated as (VIRTQUEUE_MAX_SIZE - 2) * 4096 bytes,
+where 2 virtio descriptors are lost exactly for:
+
+  - 1 descriptor for the original request (typically being small)
+
+  - 1 descriptor as indirect table pointer (when used), which just
+    contains a pointer to the separate sglist containing the
+    response's actual payload data
+
+And 4096 bytes are assumed as standard page size used by Linux 9p
+client. This results in a maximum 'msize' of 4186112 bytes.
+
+Theoretically Linux client could support a much larger size, e.g. by
+using multiple consecutive pages per sg entry / descriptor. However
+that's currently not the case and unlikely to change any time soon.
+And due to recent security issues, let's handle this limit
+conservatively until really necessary to be raised.
+
+Link: https://lore.kernel.org/qemu-devel/4c34426bc906e19423e7e2389c419c2e972d9b9b.1781287774.git.qemu_oss@crudebyte.com
+Signed-off-by: Christian Schoenebeck <qemu_oss@crudebyte.com>
+(cherry picked from commit 4a1a2fa4d351ba85628064e4a2a9cbc0c72cdbd4)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/9pfs/virtio-9p-device.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/hw/9pfs/virtio-9p-device.c b/hw/9pfs/virtio-9p-device.c
+index 9f70e2338c..8c5d86cb66 100644
+--- a/hw/9pfs/virtio-9p-device.c
++++ b/hw/9pfs/virtio-9p-device.c
+@@ -192,12 +192,19 @@ static void virtio_init_out_iov_from_pdu(V9fsPDU *pdu, struct iovec **piov,
+     *pniov = elem->out_num;
+ }
+ 
++static size_t virtio_9p_msize_limit(V9fsState *s)
++{
++    const size_t guestPageSize = 4096;
++    return (VIRTQUEUE_MAX_SIZE - 2) * guestPageSize;
++}
++
+ static const V9fsTransport virtio_9p_transport = {
+     .pdu_vmarshal = virtio_pdu_vmarshal,
+     .pdu_vunmarshal = virtio_pdu_vunmarshal,
+     .init_in_iov_from_pdu = virtio_init_in_iov_from_pdu,
+     .init_out_iov_from_pdu = virtio_init_out_iov_from_pdu,
+     .push_and_notify = virtio_9p_push_and_notify,
++    .msize_limit = virtio_9p_msize_limit,
+ };
+ 
+ static void virtio_9p_device_realize(DeviceState *dev, Error **errp)

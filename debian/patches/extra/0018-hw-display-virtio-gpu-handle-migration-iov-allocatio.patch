@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Tue, 7 Jul 2026 16:53:33 +0400
+Subject: [PATCH] hw/display/virtio-gpu: handle migration iov allocation
+ failure
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+An unbounded iov_cnt from the migration stream drives two g_new()
+allocations whose combined size can exceed available memory, causing
+GLib to abort the process.
+
+Switch to g_try_new() and propagate the failure as a migration error.
+
+Fixes: 0c244e50ee12 ("virtio-gpu: add live migration support")
+Fixes: f66767f75c9c ("virtio-gpu: add virtio-gpu/blob vmstate subsection")
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/3753
+Reported-by: Feifan Qian <bea1e@proton.me>
+Reviewed-by: Akihiko Odaki <odaki@rsg.ci.i.u-tokyo.ac.jp>
+Signed-off-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+(cherry picked from commit e99488c5d4a009a156a29f9ff6a7f12d091c2646)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/display/virtio-gpu.c | 22 ++++++++++++++++++----
+ 1 file changed, 18 insertions(+), 4 deletions(-)
+
+diff --git a/hw/display/virtio-gpu.c b/hw/display/virtio-gpu.c
+index 4661ac9674..1a06ac6fb5 100644
+--- a/hw/display/virtio-gpu.c
++++ b/hw/display/virtio-gpu.c
+@@ -1372,8 +1372,15 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
+             return -EINVAL;
+         }
+ 
+-        res->addrs = g_new(uint64_t, res->iov_cnt);
+-        res->iov = g_new(struct iovec, res->iov_cnt);
++        res->addrs = g_try_new(uint64_t, res->iov_cnt);
++        res->iov = g_try_new(struct iovec, res->iov_cnt);
++        if (res->iov_cnt && (!res->addrs || !res->iov)) {
++            pixman_image_unref(res->image);
++            g_free(res->addrs);
++            g_free(res->iov);
++            g_free(res);
++            return -EINVAL;
++        }
+ 
+         /* read data */
+         for (i = 0; i < res->iov_cnt; i++) {
+@@ -1447,8 +1454,15 @@ static int virtio_gpu_blob_load(QEMUFile *f, void *opaque, size_t size,
+         res->resource_id = resource_id;
+         res->blob_size = qemu_get_be32(f);
+         res->iov_cnt = qemu_get_be32(f);
+-        res->addrs = g_new(uint64_t, res->iov_cnt);
+-        res->iov = g_new(struct iovec, res->iov_cnt);
++
++        res->addrs = g_try_new(uint64_t, res->iov_cnt);
++        res->iov = g_try_new(struct iovec, res->iov_cnt);
++        if (res->iov_cnt && (!res->addrs || !res->iov)) {
++            g_free(res->addrs);
++            g_free(res->iov);
++            g_free(res);
++            return -EINVAL;
++        }
+ 
+         /* read data */
+         for (i = 0; i < res->iov_cnt; i++) {

@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Christian Schoenebeck <qemu_oss@crudebyte.com>
+Date: Fri, 12 Jun 2026 20:22:52 +0200
+Subject: [PATCH] hw/9pfs: add msize_limit transport callback
+
+Add a new callback 'msize_limit' to the V9fsTransport structure.
+
+This allows each transport implementation to provide its theoretical
+maximum 'msize' value, which will be used to cap the negotiated
+msize during Tversion handshake.
+
+Link: https://lore.kernel.org/qemu-devel/7c4e53eb73c0580d7a321dbf3823ba5647652298.1781287774.git.qemu_oss@crudebyte.com
+Signed-off-by: Christian Schoenebeck <qemu_oss@crudebyte.com>
+(cherry picked from commit a1c0e5a73740566d4b9eac1f97f78b8ce470116a)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/9pfs/9p.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/hw/9pfs/9p.h b/hw/9pfs/9p.h
+index b2df659b0e..d8f364fafd 100644
+--- a/hw/9pfs/9p.h
++++ b/hw/9pfs/9p.h
+@@ -481,6 +481,7 @@ struct V9fsTransport {
+     void        (*init_out_iov_from_pdu)(V9fsPDU *pdu, struct iovec **piov,
+                                          unsigned int *pniov, size_t size);
+     void        (*push_and_notify)(V9fsPDU *pdu);
++    size_t      (*msize_limit)(V9fsState *s);
+ };
+ 
+ #endif

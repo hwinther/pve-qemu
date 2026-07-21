@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Thomas Huth <thuth@redhat.com>
+Date: Wed, 15 Jul 2026 22:33:57 +0200
+Subject: [PATCH] hw/usb/hcd-xhci: Fix guest-triggerable assert() in
+ xhci_find_stream()
+
+The assert() statement in xhci_find_stream() can be triggered by
+the guest (see bug tickets #273, #3895 and #3988 on gitlab.com).
+Turn it into a qemu_log_mask() instead to fix this problem.
+
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/273
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+Signed-off-by: Thomas Huth <thuth@redhat.com>
+Message-ID: <20260715203357.424556-1-thuth@redhat.com>
+(cherry picked from commit 4daeaa2fe0f979b70fb3e54cc5661aadbffcd311)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/usb/hcd-xhci.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/hw/usb/hcd-xhci.c b/hw/usb/hcd-xhci.c
+index 39553b6ab0..bb3da6429c 100644
+--- a/hw/usb/hcd-xhci.c
++++ b/hw/usb/hcd-xhci.c
+@@ -1009,7 +1009,12 @@ static XHCIStreamContext *xhci_find_stream(XHCIEPContext *epctx,
+     dma_addr_t base;
+     uint32_t ctx[2], sct;
+ 
+-    assert(streamid != 0);
++    if (!streamid) {
++        qemu_log_mask(LOG_GUEST_ERROR, "xhci: stream ID is zero\n");
++        *cc_error = CC_INVALID_STREAM_ID_ERROR;
++        return NULL;
++    }
++
+     if (epctx->lsa) {
+         if (streamid >= epctx->nr_pstreams) {
+             *cc_error = CC_INVALID_STREAM_ID_ERROR;

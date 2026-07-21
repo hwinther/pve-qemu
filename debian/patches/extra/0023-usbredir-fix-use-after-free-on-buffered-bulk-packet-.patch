@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Tue, 14 Jul 2026 22:57:17 +0400
+Subject: [PATCH] usbredir: fix use-after-free on buffered bulk packet overflow
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When usbredir_buffered_bulk_packet() splits a multi-fragment buffered
+bulk packet into max-packet-size chunks, only the final fragment owns
+the shared parser allocation (via free_on_destroy). If bufp_alloc()
+drops the final fragment due to queue overflow, it frees the backing
+buffer while earlier fragments already queued still hold interior
+pointers into it. Subsequent guest bulk-IN transfers then read from
+freed heap memory.
+
+Fix this by tracking how many fragments were queued during the current
+packet. When bufp_alloc() fails, remove all already-queued fragments
+from the tail of the endpoint queue before breaking out of the loop.
+If the dropped fragment was non-final, free the data buffer explicitly
+since no fragment took ownership.
+
+Fixes: CVE-2026-15705
+Fixes: b2d1fe67d09d ("usbredir: Add support for buffered bulk input (v2)")
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/3808
+Reported-by: Feifan Qian <bea1e@proton.me>
+Signed-off-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+Message-ID: <20260714185717.1156157-1-marcandre.lureau@redhat.com>
+Signed-off-by: Thomas Huth <thuth@redhat.com>
+(cherry picked from commit 9bf52d056a03cd3768caccbc4c88fcc34be26c28)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/usb/redirect.c | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/hw/usb/redirect.c b/hw/usb/redirect.c
+index fda5bbca67..46db0b73af 100644
+--- a/hw/usb/redirect.c
++++ b/hw/usb/redirect.c
+@@ -2143,7 +2143,7 @@ static void usbredir_buffered_bulk_packet(void *priv, uint64_t id,
+     USBRedirDevice *dev = priv;
+     uint8_t status, ep = buffered_bulk_packet->endpoint;
+     void *free_on_destroy;
+-    int i, len;
++    int i, len, queued = 0;
+ 
+     DPRINTF("buffered-bulk-in status %d ep %02X len %d id %"PRIu64"\n",
+             buffered_bulk_packet->status, ep, data_len, id);
+@@ -2174,8 +2174,24 @@ static void usbredir_buffered_bulk_packet(void *priv, uint64_t id,
+         /* bufp_alloc also adds the packet to the ep queue */
+         r = bufp_alloc(dev, data + i, len, status, ep, free_on_destroy);
+         if (r) {
++            /*
++             * Earlier fragments from this packet are in the queue
++             * with interior pointers into data. If the dropped
++             * fragment was the final one, bufp_alloc already freed
++             * data so those pointers are dangling. Remove them.
++             */
++            while (queued > 0) {
++                struct buf_packet *bufp;
++                bufp = QTAILQ_LAST(&dev->endpoint[EP2I(ep)].bufpq);
++                bufp_free(dev, bufp, ep);
++                queued--;
++            }
++            if (!free_on_destroy) {
++                free(data);
++            }
+             break;
+         }
++        queued++;
+     }
+ 
+     if (dev->endpoint[EP2I(ep)].pending_async_packet) {

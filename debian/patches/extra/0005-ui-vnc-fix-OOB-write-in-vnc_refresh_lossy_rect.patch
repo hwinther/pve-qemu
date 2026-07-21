@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Mon, 6 Jul 2026 12:45:31 +0400
+Subject: [PATCH] ui/vnc: fix OOB write in vnc_refresh_lossy_rect
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+vnc_refresh_lossy_rect() always marks a full VNC_STAT_RECT (64) rows
+as dirty when refreshing a lossy tile. When the display height is not
+a multiple of VNC_STAT_RECT (e.g. VNC_MAX_HEIGHT = 2160), the bottom
+tile is partial -- the last tile at y=2112 has only 48 valid rows.
+The unclamped loop writes to vs->dirty[2160..2175], past the end of
+the VNC_MAX_HEIGHT-sized array.
+
+Clamp the row count to the actual surface height so partial bottom
+tiles only mark valid dirty bitmap entries.
+
+Fixes: CVE-2026-48002
+Fixes: 7d964c9d2fc6 ("vnc: refresh lossy rect after a given timeout")
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/3950
+Reported-by: huntr bubble
+Reviewed-by: Philippe Mathieu-Daudé <philmd@oss.qualcomm.com>
+Signed-off-by: Marc-Andre Lureau <marcandre.lureau@redhat.com>
+(cherry picked from commit 3543c2b855cc8cd25a5dbf05564a47ba42f45fad)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ ui/vnc.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/ui/vnc.c b/ui/vnc.c
+index 1b5fc8117a..1e6490f273 100644
+--- a/ui/vnc.c
++++ b/ui/vnc.c
+@@ -3014,10 +3014,18 @@ static int vnc_refresh_lossy_rect(VncDisplay *vd, int x, int y)
+     int sty = y / VNC_STAT_RECT;
+     int stx = x / VNC_STAT_RECT;
+     int has_dirty = 0;
++    int height = MIN(pixman_image_get_height(vd->guest.fb),
++                     pixman_image_get_height(vd->server));
++    int rows;
+ 
+     y = QEMU_ALIGN_DOWN(y, VNC_STAT_RECT);
+     x = QEMU_ALIGN_DOWN(x, VNC_STAT_RECT);
+ 
++    rows = MIN(VNC_STAT_RECT, height - y);
++    if (rows <= 0) {
++        return 0;
++    }
++
+     QTAILQ_FOREACH(vs, &vd->clients, next) {
+         VncConnection *vc = container_of(vs, VncConnection, vs);
+         int j;
+@@ -3032,7 +3040,7 @@ static int vnc_refresh_lossy_rect(VncDisplay *vd, int x, int y)
+         }
+ 
+         vc->worker.lossy_rect[sty][stx] = 0;
+-        for (j = 0; j < VNC_STAT_RECT; ++j) {
++        for (j = 0; j < rows; ++j) {
+             bitmap_set(vs->dirty[y + j],
+                        x / VNC_DIRTY_PIXELS_PER_BIT,
+                        VNC_STAT_RECT / VNC_DIRTY_PIXELS_PER_BIT);

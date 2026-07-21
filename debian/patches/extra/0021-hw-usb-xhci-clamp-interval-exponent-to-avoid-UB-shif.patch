@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Feifan Qian <bea1e@proton.me>
+Date: Fri, 24 Apr 2026 13:20:00 +0200
+Subject: [PATCH] hw/usb/xhci: clamp interval exponent to avoid UB shift in
+ xhci_init_epctx()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The xHCI endpoint context dword 0 bits 23:16 ("Interval") are written
+by the guest and passed directly as the shift amount in:
+
+    epctx->interval = 1 << ((ctx[0] >> 16) & 0xff);
+
+The shift amount can be 0-255.  Shifting a 32-bit `int` left by >= 32
+is undefined behaviour under C11 §6.5.7p4.  With UBSan
+(halt_on_error=1) this causes QEMU to abort; with aggressive compiler
+optimisations that assume UB is unreachable the result is
+unpredictable.
+
+Clamp the exponent to [0, 18] with MIN() before the shift, and use
+`1u` (unsigned) to avoid shifting a signed integer.  The xHCI
+specification defines a maximum meaningful Interval value of 18 for
+most endpoint types; thus clamping to 18 is a safe fix that
+preserves the full unsigned 32-bit range for any compliant value.
+
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/3703
+Reported-by: Feifan Qian <bea1e@proton.me>
+Signed-off-by: Feifan Qian <bea1e@proton.me>
+[thuth: Clamp to 18 instead of 31]
+Signed-off-by: Thomas Huth <thuth@redhat.com>
+(cherry picked from commit 12d8ee9d5358cd8cdd2c2193081b4d7fea4b6098)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/usb/hcd-xhci.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/usb/hcd-xhci.c b/hw/usb/hcd-xhci.c
+index 2cdab3ba0e..39553b6ab0 100644
+--- a/hw/usb/hcd-xhci.c
++++ b/hw/usb/hcd-xhci.c
+@@ -1120,7 +1120,7 @@ static void xhci_init_epctx(XHCIEPContext *epctx,
+         epctx->ring.ccs = ctx[2] & 1;
+     }
+ 
+-    epctx->interval = 1 << ((ctx[0] >> 16) & 0xff);
++    epctx->interval = 1u << MIN((ctx[0] >> 16) & 0xffu, 18u);
+ }
+ 
+ static TRBCCode xhci_enable_ep(XHCIState *xhci, unsigned int slotid,

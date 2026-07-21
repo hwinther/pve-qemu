@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Christian Schoenebeck <qemu_oss@crudebyte.com>
+Date: Fri, 12 Jun 2026 20:22:52 +0200
+Subject: [PATCH] 9pfs/virtio: implement response_buffer_size callback
+
+Add and implement the response_buffer_size callback for the virtio
+transport.
+
+Returns the actual current virtio response buffer size for the supplied
+PDU, which will be used as safety guard for limiting the response size
+when generating a 9p response.
+
+Link: https://lore.kernel.org/qemu-devel/5bbed2768f7a0da8fa2be183e75928c5d1ef691d.1781287774.git.qemu_oss@crudebyte.com
+Signed-off-by: Christian Schoenebeck <qemu_oss@crudebyte.com>
+(cherry picked from commit 12bcbdca8ae9fcd5fec093e8ef5e70521e85e889)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/9pfs/virtio-9p-device.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/hw/9pfs/virtio-9p-device.c b/hw/9pfs/virtio-9p-device.c
+index 8c5d86cb66..50dc93091d 100644
+--- a/hw/9pfs/virtio-9p-device.c
++++ b/hw/9pfs/virtio-9p-device.c
+@@ -198,6 +198,15 @@ static size_t virtio_9p_msize_limit(V9fsState *s)
+     return (VIRTQUEUE_MAX_SIZE - 2) * guestPageSize;
+ }
+ 
++static size_t virtio_9p_response_buffer_size(V9fsPDU *pdu)
++{
++    V9fsState *s = pdu->s;
++    V9fsVirtioState *v = container_of(s, V9fsVirtioState, state);
++    VirtQueueElement *elem = v->elems[pdu->idx];
++
++    return iov_size(elem->in_sg, elem->in_num);
++}
++
+ static const V9fsTransport virtio_9p_transport = {
+     .pdu_vmarshal = virtio_pdu_vmarshal,
+     .pdu_vunmarshal = virtio_pdu_vunmarshal,
+@@ -205,6 +214,7 @@ static const V9fsTransport virtio_9p_transport = {
+     .init_out_iov_from_pdu = virtio_init_out_iov_from_pdu,
+     .push_and_notify = virtio_9p_push_and_notify,
+     .msize_limit = virtio_9p_msize_limit,
++    .response_buffer_size = virtio_9p_response_buffer_size,
+ };
+ 
+ static void virtio_9p_device_realize(DeviceState *dev, Error **errp)

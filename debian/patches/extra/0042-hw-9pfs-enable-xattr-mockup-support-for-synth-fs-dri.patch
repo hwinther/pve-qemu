@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Christian Schoenebeck <qemu_oss@crudebyte.com>
+Date: Sat, 13 Jun 2026 16:55:49 +0200
+Subject: [PATCH] hw/9pfs: enable xattr (mockup) support for synth fs driver
+
+The synth backend is used for testing only. Enable xattr operations
+by making lsetxattr and lremovexattr callbacks to return success
+result.
+
+They are still actually not doing anything, they just pretend to be
+working to prevent 9pfs server from erroring out on xattr requests.
+
+This allows the subsequent test case patches to verify xattr FID
+limit enforcement.
+
+Link: https://lore.kernel.org/qemu-devel/9c1c7128135f3bd9c2f62a3f64bb730b6a94ec7a.1781361555.git.qemu_oss@crudebyte.com
+Signed-off-by: Christian Schoenebeck <qemu_oss@crudebyte.com>
+(cherry picked from commit 0e3085ddc7fb137b727829913c20ad9d08577bdb)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/9pfs/9p-synth.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/hw/9pfs/9p-synth.c b/hw/9pfs/9p-synth.c
+index 322dc3bb69..4b0732e093 100644
+--- a/hw/9pfs/9p-synth.c
++++ b/hw/9pfs/9p-synth.c
+@@ -477,15 +477,15 @@ static int synth_lsetxattr(FsContext *ctx, V9fsPath *path,
+                                 const char *name, void *value,
+                                 size_t size, int flags)
+ {
+-    errno = ENOTSUP;
+-    return -1;
++    /* pretend it worked */
++    return 0;
+ }
+ 
+ static int synth_lremovexattr(FsContext *ctx,
+                                    V9fsPath *path, const char *name)
+ {
+-    errno = ENOTSUP;
+-    return -1;
++    /* pretend it worked */
++    return 0;
+ }
+ 
+ static int synth_name_to_path(FsContext *ctx, V9fsPath *dir_path,

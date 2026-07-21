@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Xiangfeng Cai <caixiangfeng@bytedance.com>
+Date: Thu, 18 Jun 2026 19:01:18 +0800
+Subject: [PATCH] hw/usb/hcd-xhci-pci: break host link cycle so
+ device_finalize() runs on unplug
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The xHCI PCI wrapper embeds an xhci-core child via object_initialize_child()
+and, in usb_xhci_pci_realize(), points the child's "host" link back at the PCI
+device:
+
+    object_property_set_link(OBJECT(&s->xhci), "host", OBJECT(s), NULL);
+
+"host" is a DEFINE_PROP_LINK property, which qdev registers as an
+OBJ_PROP_LINK_STRONG link. A strong link takes a reference on its target, so
+this creates a refcount cycle: the PCI device owns the child, and the child's
+strong link pins the PCI device.
+
+On unplug (guest ACPI eject or QMP device_del), pci_qdev_unrealize() calls
+pc->exit() but never unrealizes the no-bus child. object_unparent() then drops
+only the parent/bus references, leaving the link reference in place. The PCI
+device stays at refcount 1 forever, so object_finalize()/device_finalize() is
+never reached. Symptom observed under gdb after eject:
+
+    p *((Object *)dev)  =>  ref = 1, parent = 0x0, realized = false
+    p ((XHCIPciState *)dev)->xhci.hostOpaque  =>  points back at dev
+
+Fix usb_xhci_pci_exit() to tear down the embedded child explicitly: unrealize
+it first (so the set-link-before-realize check passes), then clear the "host"
+link. This releases the strong reference, lets the PCI device refcount reach 0,
+and allows device_finalize() to run.
+
+Fixes: 8ddab8dd3d81 ("usb/hcd-xhci: Split pci wrapper for xhci base model")
+Signed-off-by: Xiangfeng Cai <caixiangfeng@bytedance.com>
+Acked-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+Message-ID: <20260618110119.3084296-2-caixiangfeng@bytedance.com>
+Signed-off-by: Thomas Huth <thuth@redhat.com>
+(cherry picked from commit 054ef33f674cdc6cb87df599790d99cfcda363cc)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/usb/hcd-xhci-pci.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/hw/usb/hcd-xhci-pci.c b/hw/usb/hcd-xhci-pci.c
+index c5446a4a5e..b124251ae3 100644
+--- a/hw/usb/hcd-xhci-pci.c
++++ b/hw/usb/hcd-xhci-pci.c
+@@ -196,6 +196,18 @@ static void usb_xhci_pci_exit(PCIDevice *dev)
+         && dev->msix_entry_used) {
+         msix_uninit(dev, &s->xhci.mem, &s->xhci.mem);
+     }
++    /*
++     * The embedded xhci-core child holds a strong "host" link back to this
++     * PCI device (set in usb_xhci_pci_realize()), forming a refcount cycle:
++     * the PCI device owns the child, and the child's strong link pins the PCI
++     * device. On unplug, object_unparent() only drops the parent/bus refs, so
++     * the link ref keeps this device at refcount 1 forever and
++     * device_finalize() never runs. Unrealize the child first (so the
++     * realized-check in set_link passes), then clear the link to break the
++     * cycle.
++     */
++    qdev_unrealize(DEVICE(&s->xhci));
++    object_property_set_link(OBJECT(&s->xhci), "host", NULL, &error_abort);
+ }
+ 
+ static const VMStateDescription vmstate_xhci_pci = {

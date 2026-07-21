@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akihiko Odaki <odaki@rsg.ci.i.u-tokyo.ac.jp>
+Date: Fri, 17 Jul 2026 16:05:23 +0900
+Subject: [PATCH] hw/display/virtio-gpu: Check pixman_image_create_bits()
+ results
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+pixman_image_create_bits() returns NULL for allocation failures and
+unaligned strides, which may be supplied by the guest with
+VIRTIO_GPU_CMD_SET_SCANOUT_BLOB, and virtio_gpu_do_set_scanout()
+subsequently dereferences it.
+
+Fixes: fa06e5cb7b10 ("virtio-gpu: fix scanout rectangles")
+Signed-off-by: Akihiko Odaki <odaki@rsg.ci.i.u-tokyo.ac.jp>
+Reviewed-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+Message-ID: <20260717-pixman-v1-1-89ea33b50b75@rsg.ci.i.u-tokyo.ac.jp>
+(cherry picked from commit f1af81ba2aeec7b5a5ee8529ef55275865aea0c0)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/display/virtio-gpu.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/hw/display/virtio-gpu.c b/hw/display/virtio-gpu.c
+index c024cbf6e6..e049ddffa4 100644
+--- a/hw/display/virtio-gpu.c
++++ b/hw/display/virtio-gpu.c
+@@ -696,6 +696,10 @@ static bool virtio_gpu_do_set_scanout(VirtIOGPU *g,
+         void *ptr = data + fb->offset;
+         rect = pixman_image_create_bits(fb->format, r->width, r->height,
+                                         ptr, fb->stride);
++        if (!rect) {
++            *error = VIRTIO_GPU_RESP_ERR_UNSPEC;
++            return false;
++        }
+ 
+         if (res->image) {
+             pixman_image_ref(res->image);

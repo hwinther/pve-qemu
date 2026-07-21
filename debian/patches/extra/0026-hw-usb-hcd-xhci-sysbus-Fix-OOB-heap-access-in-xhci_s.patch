@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Thomas Huth <thuth@redhat.com>
+Date: Sun, 19 Jul 2026 08:15:28 +0200
+Subject: [PATCH] hw/usb/hcd-xhci-sysbus: Fix OOB heap access in
+ xhci_sysbus_intr_raise()
+
+Some machines like the microvm machine instantiate a "sysbus-xhci"
+device with just 1 interrupt (by setting the "intrs" property to 1).
+xhci_sysbus_realize() then only allocates the s->irq array with one
+entry.
+
+When the guest writes to the ERDP register of a corresponding XHCI
+"interrupter", the generic XHCI code calls the xhci_sysbus_intr_raise()
+function with n > 1, and this function then calls qemu_set_irq() with
+s->irq[n] pointing to a bad heap address. The qemu_set_irq() then tries
+to call an IRQ handler via a function pointer in that heap space. This
+either causes QEMU to die with a segmentation fault (if it's a bad
+address), or even worse runs some unexpected code if the destination
+of the pointer is executable code.
+
+Looking at the xHCI spec, it is up to the implementation of the host
+controller how many interrupters are available. So if we only support
+one or some few interrupters, the registers of the other interrupters
+should not do anything, i.e. reads should result in zeros and writes
+should be completely ignored. (big thanks to Peter Maydell for helping
+with the analyzation of the correct way to fix this here)
+
+This way, the xhci_sysbus_intr_raise() function cannot be called with
+an invalid interrupt number anymore. But for good measure, also add an
+assert() statement to the xhci_sysbus_intr_raise() function to prevent
+that similar problems with calling arbitrary function pointers on the
+heap could occur again.
+
+Fixes: CVE-2026-16043
+Resolves: https://gitlab.com/qemu-project/qemu/-/work_items/4001
+Reported-by: Tristan Madani <tristan@talencesecurity.com>
+Reviewed-by: Peter Maydell <peter.maydell@linaro.org>
+Signed-off-by: Thomas Huth <thuth@redhat.com>
+Message-ID: <20260719061528.15587-1-thuth@redhat.com>
+(cherry picked from commit cc479aa89743655a725ce29328bcd0585a65983a)
+Signed-off-by: Fiona Ebner <f.ebner@proxmox.com>
+---
+ hw/usb/hcd-xhci-sysbus.c |  1 +
+ hw/usb/hcd-xhci.c        | 13 +++++++++++++
+ 2 files changed, 14 insertions(+)
+
+diff --git a/hw/usb/hcd-xhci-sysbus.c b/hw/usb/hcd-xhci-sysbus.c
+index 19664c5985..bbdd5fd64a 100644
+--- a/hw/usb/hcd-xhci-sysbus.c
++++ b/hw/usb/hcd-xhci-sysbus.c
+@@ -20,6 +20,7 @@ static bool xhci_sysbus_intr_raise(XHCIState *xhci, int n, bool level)
+ {
+     XHCISysbusState *s = container_of(xhci, XHCISysbusState, xhci);
+ 
++    assert(n < xhci->numintrs);
+     qemu_set_irq(s->irq[n], level);
+ 
+     return false;
+diff --git a/hw/usb/hcd-xhci.c b/hw/usb/hcd-xhci.c
+index bb3da6429c..5236fe4ddc 100644
+--- a/hw/usb/hcd-xhci.c
++++ b/hw/usb/hcd-xhci.c
+@@ -3045,6 +3045,12 @@ static uint64_t xhci_runtime_read(void *ptr, hwaddr reg,
+         }
+     } else {
+         int v = (reg - 0x20) / 0x20;
++
++        if (v >= xhci->numintrs) {
++            qemu_log_mask(LOG_GUEST_ERROR,
++                          "xhci: read from nonexistent interrupter %i\n", v);
++            goto out_trace;
++        }
+         XHCIInterrupter *intr = &xhci->intr[v];
+         switch (reg & 0x1f) {
+         case 0x00: /* IMAN */
+@@ -3071,6 +3077,7 @@ static uint64_t xhci_runtime_read(void *ptr, hwaddr reg,
+         }
+     }
+ 
++out_trace:
+     trace_usb_xhci_runtime_read(reg, ret);
+     return ret;
+ }
+@@ -3088,7 +3095,13 @@ static void xhci_runtime_write(void *ptr, hwaddr reg,
+         trace_usb_xhci_unimplemented("runtime write", reg);
+         return;
+     }
++
+     v = (reg - 0x20) / 0x20;
++    if (v >= xhci->numintrs) {
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "xhci: write to nonexistent interrupter %i\n", v);
++        return;
++    }
+     intr = &xhci->intr[v];
+ 
+     switch (reg & 0x1f) {
